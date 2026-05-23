@@ -1,8 +1,6 @@
 # 1. DATOS SINTÉTICOS Y EXPORTACIONES (Big Data)
 # Ignoramos la carpeta de datos para evitar subir millones de registros que pueden ser generados localmente
 /data/
-*.csv
-*.json
 *.parquet
 # Formatos específicos de grafos
 *.graphml
@@ -52,6 +50,11 @@ benchmarking_results/
 .idea/
 *.swp
 .github/agents/*
+
+# 7. FRONTEND (Next.js)
+node_modules/
+.next/
+out/
 
 # Archivos basura del Sistema Operativo
 .DS_Store
