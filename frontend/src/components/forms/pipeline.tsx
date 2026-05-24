@@ -12,12 +12,13 @@ import {
   Badge,
 } from "@tremor/react";
 import Slider from '@mui/material/Slider';
-import { 
-  RocketLaunchIcon, 
-  CircleStackIcon, 
+import {
+  RocketLaunchIcon,
+  CircleStackIcon,
   AdjustmentsHorizontalIcon,
   InformationCircleIcon
 } from "@heroicons/react/24/outline";
+import { API_BASE } from "@/lib/api";
 
 export default function PipelinePage() {
   const [loading, setLoading] = useState(false);
@@ -44,7 +45,7 @@ export default function PipelinePage() {
     setStatus({ type: null, msg: "" });
     try {
       const finalData = { ...formData, rows: Math.max(2, Number(formData.rows) || 2) };
-      const response = await fetch("http://127.0.0.1:8000/api/pipeline/run", {
+      const response = await fetch(`${API_BASE}/api/pipeline/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(finalData),

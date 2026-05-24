@@ -3,11 +3,11 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import {
-  Card, Metric, Text, Grid, AreaChart, Title, Flex, Badge,
+  Card, Metric, Text, Grid, AreaChart, Title, Flex,
   DonutChart, Legend, BarList,
-  Table, TableHead, TableHeaderCell, TableBody, TableRow, TableCell,
 } from "@tremor/react";
-import { ServerIcon } from "@heroicons/react/24/outline";
+import { API_BASE } from "@/lib/api";
+import { LoadingState, ErrorState } from "@/components/ui/LoadingState";
 
 const SpainMap = dynamic(() => import("@/components/charts/SpainMap"), {
   ssr: false,
@@ -31,7 +31,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch("http://localhost:8000/api/dashboard/macro")
+    fetch(`${API_BASE}/api/dashboard/macro`)
       .then((res) => res.json())
       .then((json) => {
         setData(json);
@@ -43,23 +43,13 @@ export default function DashboardPage() {
       });
   }, []);
 
-  if (loading) {
-    return (
-      <main className="p-10 max-w-7xl mx-auto flex flex-col items-center justify-center min-h-[60vh]">
-        <div className="w-12 h-12 border-4 border-cyan-500 border-t-transparent rounded-full animate-spin mb-4" />
-        <Text className="text-slate-400 animate-pulse">Sincronizando con el motor Neo4j...</Text>
-      </main>
-    );
-  }
-
+  if (loading) return <LoadingState text="Sincronizando con el motor Neo4j..." />;
   if (!data || !data.macro_stats) {
     return (
-      <main className="p-10 max-w-7xl mx-auto text-center">
-        <Title className="text-red-400 mb-2">Sin conexión de datos</Title>
-        <Text className="text-slate-500">
-          Asegúrate de haber ejecutado el pipeline primero o de que FastAPI esté encendido.
-        </Text>
-      </main>
+      <ErrorState
+        title="Sin conexión de datos"
+        message="Asegúrate de haber ejecutado el pipeline primero o de que FastAPI esté encendido."
+      />
     );
   }
 

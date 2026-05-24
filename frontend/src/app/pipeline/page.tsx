@@ -5,6 +5,7 @@ import { toast } from 'sonner';
 import React, { useState, useEffect } from "react";
 import { Title, Text, Flex } from "@tremor/react";
 import { AdjustmentsHorizontalIcon } from "@heroicons/react/24/outline";
+import { API_BASE } from "@/lib/api";
 
 // Importación de componentes
 import TopologySection from "@/components/forms/TopologySection";
@@ -42,7 +43,7 @@ export default function PipelinePage() {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000); 
 
-        const res = await fetch("http://127.0.0.1:8000/api/health", {
+        const res = await fetch(`${API_BASE}/api/health`, {
           signal: controller.signal
         });
         
@@ -73,7 +74,7 @@ export default function PipelinePage() {
     setLoading(true);
     try {
       const finalData = { ...formData, rows: Math.max(2, Number(formData.rows) || 2) };
-      const response = await fetch("http://127.0.0.1:8000/api/pipeline/run", {
+      const response = await fetch(`${API_BASE}/api/pipeline/run`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(finalData),

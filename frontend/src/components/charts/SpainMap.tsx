@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { ComposableMap, Geographies, Geography, Marker } from "react-simple-maps";
 import { toast } from "sonner";
+import { API_BASE } from "@/lib/api";
 
 export default function SpainMap() {
   const [locations, setLocations] = useState<any[]>([]);
@@ -14,7 +15,7 @@ export default function SpainMap() {
     const signal = controller.signal;
 
     // 2. Le pasamos la señal al fetch
-    fetch("http://localhost:8000/api/network/locations", { signal })
+    fetch(`${API_BASE}/api/network/locations`, { signal })
       .then((res) => {
         if (!res.ok) throw new Error("Fallo en la respuesta del servidor");
         return res.json();
