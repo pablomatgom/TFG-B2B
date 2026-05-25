@@ -76,10 +76,10 @@ export default function AnalyticsPage() {
     <main className="p-6 md:p-10 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
 
       <div>
-        <Title className="text-3xl font-bold text-white">Analítica Avanzada de Red</Title>
-        <Text className="text-slate-400">
+        <h1 className="text-3xl font-bold text-white">Analítica Avanzada de Red</h1>
+        <p className="text-slate-400 mt-1">
           Riesgo de concentración, calidad documental, cumplimiento operativo y exposición financiera.
-        </Text>
+        </p>
       </div>
 
       <TabGroup>
@@ -113,7 +113,7 @@ export default function AnalyticsPage() {
                       value: s.share_pct,
                     }))}
                     color="red"
-                    valueFormatter={(n) => `${n}%`}
+                    valueFormatter={(n: number) => `${n}%`}
                   />
                 </Card>
               </Grid>

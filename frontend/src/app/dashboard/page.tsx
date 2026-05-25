@@ -3,9 +3,18 @@
 import { useState, useEffect } from "react";
 import dynamic from "next/dynamic";
 import {
-  Card, Metric, Text, Grid, AreaChart, Title, Flex,
+  Card, Text, Grid, AreaChart, Title,
   DonutChart, Legend, BarList,
 } from "@tremor/react";
+import {
+  BuildingOffice2Icon,
+  CubeIcon,
+  DocumentTextIcon,
+  ArrowsRightLeftIcon,
+  ChartBarIcon,
+  DocumentDuplicateIcon,
+  MapPinIcon,
+} from "@heroicons/react/24/outline";
 import { API_BASE } from "@/lib/api";
 import { LoadingState, ErrorState } from "@/components/ui/LoadingState";
 
@@ -26,6 +35,71 @@ const DOC_TYPE_COLORS: Record<string, string> = {
   CREDIT_NOTE: "amber",
 };
 
+const KPI_CONFIG = [
+  {
+    label: "Empresas Activas",
+    key: "Company" as const,
+    icon: BuildingOffice2Icon,
+    iconBg: "bg-blue-500/10",
+    iconColor: "text-blue-400",
+    border: "border-blue-500/20 hover:border-blue-500/40",
+    glow: "shadow-blue-500/5",
+  },
+  {
+    label: "Catálogo Productos",
+    key: "Product" as const,
+    icon: CubeIcon,
+    iconBg: "bg-purple-500/10",
+    iconColor: "text-purple-400",
+    border: "border-purple-500/20 hover:border-purple-500/40",
+    glow: "shadow-purple-500/5",
+  },
+  {
+    label: "Documentos EDI",
+    key: "Document" as const,
+    icon: DocumentTextIcon,
+    iconBg: "bg-amber-500/10",
+    iconColor: "text-amber-400",
+    border: "border-amber-500/20 hover:border-amber-500/40",
+    glow: "shadow-amber-500/5",
+  },
+  {
+    label: "Total Conexiones",
+    key: "__total_edges__" as const,
+    icon: ArrowsRightLeftIcon,
+    iconBg: "bg-emerald-500/10",
+    iconColor: "text-emerald-400",
+    border: "border-emerald-500/20 hover:border-emerald-500/40",
+    glow: "shadow-emerald-500/5",
+  },
+];
+
+function SectionHeader({
+  icon: Icon,
+  title,
+  subtitle,
+  iconColor = "text-cyan-400",
+  iconBg = "bg-cyan-500/10",
+}: {
+  icon: React.ElementType;
+  title: string;
+  subtitle: string;
+  iconColor?: string;
+  iconBg?: string;
+}) {
+  return (
+    <div className="flex items-start gap-3 mb-6">
+      <div className={`p-2 ${iconBg} rounded-lg flex-shrink-0 mt-0.5`}>
+        <Icon className={`w-5 h-5 ${iconColor}`} />
+      </div>
+      <div>
+        <Title className="text-white leading-tight">{title}</Title>
+        <Text className="text-slate-400 text-sm">{subtitle}</Text>
+      </div>
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -33,14 +107,8 @@ export default function DashboardPage() {
   useEffect(() => {
     fetch(`${API_BASE}/api/dashboard/macro`)
       .then((res) => res.json())
-      .then((json) => {
-        setData(json);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error("Error conectando a FastAPI:", err);
-        setLoading(false);
-      });
+      .then((json) => { setData(json); setLoading(false); })
+      .catch(() => setLoading(false));
   }, []);
 
   if (loading) return <LoadingState text="Sincronizando con el motor Neo4j..." />;
@@ -61,14 +129,17 @@ export default function DashboardPage() {
   );
   const seriesTemporales = data.temporal_series || [];
 
+  const kpiValues: Record<string, number> = {
+    ...nodes,
+    __total_edges__: totalRelaciones,
+  };
+
   const docTypeCounts: Record<string, number> = data.macro_stats.doc_type_counts || {};
   const docTypeChartData = Object.entries(docTypeCounts).map(([name, value]) => ({
     name,
     value: value as number,
   }));
-  const docTypeColors = docTypeChartData.map(
-    (d) => DOC_TYPE_COLORS[d.name] ?? "slate"
-  );
+  const docTypeColors = docTypeChartData.map((d) => DOC_TYPE_COLORS[d.name] ?? "slate");
 
   const topSuppliers = (data.macro_stats.top_suppliers || []).map((s: any) => ({
     name: s.legal_name,
@@ -80,41 +151,41 @@ export default function DashboardPage() {
   }));
 
   return (
-    <main className="p-6 md:p-10 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500">
+    <main className="p-6 md:p-10 max-w-7xl mx-auto space-y-10 animate-in fade-in duration-500">
 
-      <Flex justifyContent="between" alignItems="center">
-        <div>
-          <Title className="text-3xl font-bold text-white">Dashboard Macroscópico</Title>
-          <Text className="text-slate-400">Visión global de la red logística en base de datos de grafos.</Text>
-        </div>
-      </Flex>
+      {/* PAGE HEADER */}
+      <div>
+        <h1 className="text-3xl font-bold text-white">Dashboard Macroscópico</h1>
+        <p className="text-slate-400 mt-1">Visión global de la red logística en base de datos de grafos.</p>
+      </div>
 
       {/* KPI CARDS */}
-      <Grid numItemsSm={2} numItemsLg={4} className="gap-6">
-        <Card decoration="top" decorationColor="blue" className="bg-[#1E212B] border-slate-800">
-          <Text className="text-slate-400">Empresas Activas</Text>
-          <Metric className="text-white mt-2">{nodes.Company?.toLocaleString() || 0}</Metric>
-        </Card>
-        <Card decoration="top" decorationColor="purple" className="bg-[#1E212B] border-slate-800">
-          <Text className="text-slate-400">Catálogo Productos</Text>
-          <Metric className="text-white mt-2">{nodes.Product?.toLocaleString() || 0}</Metric>
-        </Card>
-        <Card decoration="top" decorationColor="amber" className="bg-[#1E212B] border-slate-800">
-          <Text className="text-slate-400">Documentos</Text>
-          <Metric className="text-white mt-2">{nodes.Document?.toLocaleString() || 0}</Metric>
-        </Card>
-        <Card decoration="top" decorationColor="emerald" className="bg-[#1E212B] border-slate-800">
-          <Text className="text-slate-400">Total Conexiones</Text>
-          <Metric className="text-white mt-2">{totalRelaciones.toLocaleString()}</Metric>
-        </Card>
-      </Grid>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6">
+        {KPI_CONFIG.map((kpi) => (
+          <div
+            key={kpi.label}
+            className={`bg-[#1E212B] rounded-2xl border ${kpi.border} p-5 md:p-6 flex items-center gap-4 transition-all duration-200 shadow-lg ${kpi.glow}`}
+          >
+            <div className={`p-3 ${kpi.iconBg} rounded-xl flex-shrink-0`}>
+              <kpi.icon className={`w-6 h-6 ${kpi.iconColor}`} />
+            </div>
+            <div>
+              <p className="text-slate-400 text-xs uppercase font-medium tracking-wide leading-tight">{kpi.label}</p>
+              <p className="text-white text-2xl md:text-3xl font-bold mt-0.5 tabular-nums">
+                {(kpiValues[kpi.key] ?? 0).toLocaleString("es")}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* TEMPORAL CHART */}
       <Card className="bg-[#1E212B] border-slate-800">
-        <Title className="text-white">Evolución de Transacciones Documentales</Title>
-        <Text className="text-slate-400 mb-6">
-          Línea temporal de la generación de contratos y facturas en el sistema.
-        </Text>
+        <SectionHeader
+          icon={ChartBarIcon}
+          title="Evolución de Transacciones Documentales"
+          subtitle="Línea temporal de la generación de contratos y facturas en el sistema."
+        />
         <AreaChart
           className="h-80"
           data={seriesTemporales}
@@ -130,8 +201,13 @@ export default function DashboardPage() {
       {/* DOC TYPE + TOP SUPPLIERS/BUYERS */}
       <Grid numItemsSm={1} numItemsLg={3} className="gap-6">
         <Card className="bg-[#1E212B] border-slate-800">
-          <Title className="text-white mb-1">Tipos de Documento</Title>
-          <Text className="text-slate-400 mb-4">Distribución por categoría EDI.</Text>
+          <SectionHeader
+            icon={DocumentDuplicateIcon}
+            title="Tipos de Documento"
+            subtitle="Distribución por categoría EDI."
+            iconColor="text-amber-400"
+            iconBg="bg-amber-500/10"
+          />
           {docTypeChartData.length > 0 ? (
             <>
               <DonutChart
@@ -149,27 +225,37 @@ export default function DashboardPage() {
               />
             </>
           ) : (
-            <Text className="text-slate-500 mt-6 text-center">Sin datos — ejecuta el pipeline primero.</Text>
+            <Text className="text-slate-500 py-8 text-center">Sin datos — ejecuta el pipeline primero.</Text>
           )}
         </Card>
 
         <Card className="bg-[#1E212B] border-slate-800">
-          <Title className="text-white mb-1">Top Proveedores</Title>
-          <Text className="text-slate-400 mb-4">Por número de clientes abastecidos.</Text>
+          <SectionHeader
+            icon={BuildingOffice2Icon}
+            title="Top Proveedores"
+            subtitle="Por número de clientes abastecidos."
+            iconColor="text-cyan-400"
+            iconBg="bg-cyan-500/10"
+          />
           {topSuppliers.length > 0 ? (
             <BarList data={topSuppliers} color="cyan" valueFormatter={(n: number) => `${n} clientes`} />
           ) : (
-            <Text className="text-slate-500 mt-6 text-center">Sin datos.</Text>
+            <Text className="text-slate-500 py-8 text-center">Sin datos.</Text>
           )}
         </Card>
 
         <Card className="bg-[#1E212B] border-slate-800">
-          <Title className="text-white mb-1">Top Compradores</Title>
-          <Text className="text-slate-400 mb-4">Por número de proveedores recibidos.</Text>
+          <SectionHeader
+            icon={BuildingOffice2Icon}
+            title="Top Compradores"
+            subtitle="Por número de proveedores recibidos."
+            iconColor="text-violet-400"
+            iconBg="bg-violet-500/10"
+          />
           {topBuyers.length > 0 ? (
             <BarList data={topBuyers} color="violet" valueFormatter={(n: number) => `${n} proveedores`} />
           ) : (
-            <Text className="text-slate-500 mt-6 text-center">Sin datos.</Text>
+            <Text className="text-slate-500 py-8 text-center">Sin datos.</Text>
           )}
         </Card>
       </Grid>
@@ -177,8 +263,13 @@ export default function DashboardPage() {
       {/* SPAIN MAP */}
       <Card className="bg-[#1E212B] border-slate-800 p-0 overflow-hidden">
         <div className="p-6 pb-2">
-          <Title className="text-white">Distribución Geográfica</Title>
-          <Text className="text-slate-400">Concentración de empresas por municipio español.</Text>
+          <SectionHeader
+            icon={MapPinIcon}
+            title="Distribución Geográfica"
+            subtitle="Concentración de empresas por municipio español."
+            iconColor="text-emerald-400"
+            iconBg="bg-emerald-500/10"
+          />
         </div>
         <SpainMap />
       </Card>

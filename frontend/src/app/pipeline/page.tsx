@@ -11,7 +11,6 @@ import { API_BASE } from "@/lib/api";
 import TopologySection from "@/components/forms/TopologySection";
 import InfrastructureSection from "@/components/forms/InfrastructureSection";
 import ConnectivitySection from "@/components/forms/ConnectivitySection";
-import DbStatusBadge from "@/components/ui/DbStatusBadge"; // <-- Importamos nuestro nuevo UI Component
 import { PipelineFormData, StatusState } from "@/types/pipeline";
 
 export default function PipelinePage() {
@@ -36,34 +35,6 @@ export default function PipelinePage() {
     use_random_seed: true,
     seed_value: 42
   });
-
-  useEffect(() => {
-    const checkConnection = async () => {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000); 
-
-        const res = await fetch(`${API_BASE}/api/health`, {
-          signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-
-        if (res.ok) {
-          setDbStatus("connected");
-        } else {
-          setDbStatus("disconnected");
-        }
-      } catch (error) {
-        setDbStatus("disconnected");
-      }
-    };
-
-    checkConnection();
-    // Revisamos cada 10 segundos para detectar cambios en el estado de la base de datos
-    const intervalId = setInterval(checkConnection, 10000);
-    return () => clearInterval(intervalId);
-  }, []);
 
   const runPipeline = async () => {
     if (dbStatus === "disconnected") {
@@ -113,9 +84,6 @@ export default function PipelinePage() {
             </Title>
             <Text className="text-slate-400 mt-2">Configuración del modelo sintético y orquestación Neo4j</Text>
           </div>
-
-          {/* Usamos el componente modular pasando la prop status */}
-          <DbStatusBadge status={dbStatus} />
         </Flex>
       </div>
 

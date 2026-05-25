@@ -57,7 +57,7 @@ echo  Ready!
 
 :: ── 4. Start FastAPI backend ─────────────────────────────────────────────────
 echo  [4/5] Starting FastAPI backend (port 8000)...
-start "TFG-B2B Backend" cmd /k "python -m uvicorn backend.api.main:app --reload --host 0.0.0.0 --port 8000"
+start "TFG-B2B Backend" cmd /k ".\.venv\Scripts\activate.bat && python -m uvicorn backend.api.main:app --reload --host 0.0.0.0 --port 8000"
 timeout /t 4 /nobreak >nul
 echo         OK
 
