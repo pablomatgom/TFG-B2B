@@ -47,6 +47,8 @@ class Neo4jBulkLoader:
         "CREATE INDEX product_criticality_idx IF NOT EXISTS FOR (p:Product) ON (p.criticality)",
         "CREATE INDEX document_type_idx IF NOT EXISTS FOR (d:Document) ON (d.doc_type)",
         "CREATE INDEX document_contract_idx IF NOT EXISTS FOR (d:Document) ON (d.contract_type)",
+        "CREATE INDEX document_discrepancy_idx IF NOT EXISTS FOR (d:Document) ON (d.discrepancy_flag)",
+        "CREATE INDEX document_type_discrepancy_idx IF NOT EXISTS FOR (d:Document) ON (d.doc_type, d.discrepancy_flag)",
     ]
 
     LOAD_QUERIES: dict[str, str] = {

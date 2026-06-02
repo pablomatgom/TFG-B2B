@@ -208,13 +208,6 @@ def _build_scale_free_metrics(degrees: list[int]) -> dict[str, Any]:
 class MacroMixin:
     """Estadísticas macroscópicas de la red y distribución geográfica."""
 
-    # ── Internal helper ───────────────────────────────────────────────────────
-
-    def _fetch_data(self, query: str, **params: Any) -> list[dict[str, Any]]:
-        """Execute a read-only query. The driver retries automatically on transient errors."""
-        with self._driver.session(database=self.neo4j_database) as session:
-            return session.execute_read(lambda tx: tx.run(query, **params).data())
-
     # ── Public API ────────────────────────────────────────────────────────────
 
     def get_macro_statistics(self) -> GraphMacroStats:
