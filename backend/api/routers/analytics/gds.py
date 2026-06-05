@@ -4,10 +4,10 @@ from fastapi import APIRouter
 
 from backend.api.dependencies import read_json
 
-router = APIRouter()
+router = APIRouter(prefix="/gds")
 
 
-@router.get("/gds")
+@router.get("")
 def get_gds_analytics():
     return {
         "bottlenecks": read_json("bottlenecks.json", default=[]),

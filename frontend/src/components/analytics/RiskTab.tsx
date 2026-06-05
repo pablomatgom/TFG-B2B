@@ -3,47 +3,80 @@
 import { useState } from "react";
 import {
   Card, Title, Text, Metric, Grid, Flex,
-  DonutChart, CategoryBar, BarList,
+  DonutChart, CategoryBar, BarList, ProgressBar,
   Table, TableHead, TableHeaderCell, TableBody, TableRow, TableCell,
 } from "@tremor/react";
-import type { RiskData, CommercialImpactRow } from "@/types/analytics";
-import { EMPTY, EUR, SIGN, EstadoPill, ShowMoreButton, SectionModal } from "./shared";
+import type { RiskData, SupplierScoreRow, BuyerFragilityRow } from "@/types/analytics";
+import { EMPTY, EUR, ShowMoreButton, SectionModal } from "./shared";
 
 const PAGE = 10;
 
-interface Props {
-  risk:       RiskData | null;
-  commercial: CommercialImpactRow[];
+function riskBarColor(score: number): "red" | "yellow" | "emerald" {
+  if (score >= 70) return "red";
+  if (score >= 40) return "yellow";
+  return "emerald";
 }
 
-function CommercialTable({ rows }: { rows: CommercialImpactRow[] }) {
+function riskTextColor(score: number): string {
+  if (score >= 70) return "text-red-400";
+  if (score >= 40) return "text-amber-400";
+  return "text-emerald-400";
+}
+
+function fragilityBarColor(pct: number): "red" | "yellow" | "emerald" {
+  if (pct >= 80) return "red";
+  if (pct >= 50) return "yellow";
+  return "emerald";
+}
+
+function fragilityTextColor(pct: number): string {
+  if (pct >= 80) return "text-red-400";
+  if (pct >= 50) return "text-amber-400";
+  return "text-emerald-400";
+}
+
+function SectionLabel({ index, title, subtitle }: { index: string; title: string; subtitle: string }) {
+  return (
+    <div className="flex items-baseline gap-3 mb-4">
+      <span className="text-[var(--primary)] font-mono text-xs opacity-60">{index}</span>
+      <div>
+        <h3 className="text-white font-semibold text-sm">{title}</h3>
+        <p className="text-slate-500 text-xs">{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
+function ScoresTable({ rows }: { rows: SupplierScoreRow[] }) {
   return (
     <Table>
       <TableHead>
         <TableRow>
-          <TableHeaderCell className="text-slate-400">Pedido</TableHeaderCell>
+          <TableHeaderCell className="text-slate-400">#</TableHeaderCell>
           <TableHeaderCell className="text-slate-400">Proveedor</TableHeaderCell>
-          <TableHeaderCell className="text-slate-400 text-right">Pedido (€)</TableHeaderCell>
-          <TableHeaderCell className="text-slate-400 text-right">Facturado (€)</TableHeaderCell>
-          <TableHeaderCell className="text-slate-400 text-right">Δ €</TableHeaderCell>
-          <TableHeaderCell className="text-slate-400 text-right">Δ %</TableHeaderCell>
-          <TableHeaderCell className="text-slate-400 text-right">Estado</TableHeaderCell>
+          <TableHeaderCell className="text-slate-400 text-right">Fiabilidad</TableHeaderCell>
+          <TableHeaderCell className="text-slate-400 text-right">Discrepancia %</TableHeaderCell>
+          <TableHeaderCell className="text-slate-400 text-right">Retraso (d)</TableHeaderCell>
+          <TableHeaderCell className="text-slate-400 text-right">Score</TableHeaderCell>
         </TableRow>
       </TableHead>
       <TableBody>
-        {rows.map((row) => (
-          <TableRow key={row.pedido_id}>
-            <TableCell className="text-slate-400 font-mono text-xs">{row.pedido_id}</TableCell>
-            <TableCell className="text-white text-sm">{row.proveedor}</TableCell>
-            <TableCell className="text-slate-300 text-right font-mono">{EUR(row.importe_pedido_eur, 2)}</TableCell>
-            <TableCell className="text-slate-300 text-right font-mono">{EUR(row.total_facturado_eur, 2)}</TableCell>
-            <TableCell className={`text-right font-mono font-semibold ${row.delta_eur > 0 ? "text-red-400" : row.delta_eur < 0 ? "text-amber-400" : "text-slate-400"}`}>
-              {SIGN(row.delta_eur)}{EUR(row.delta_eur, 2)}
+        {rows.map((row, i) => (
+          <TableRow key={row.supplier}>
+            <TableCell className="text-slate-500 text-xs">{i + 1}</TableCell>
+            <TableCell className="text-white">{row.supplier}</TableCell>
+            <TableCell className="text-right font-mono text-slate-300">
+              {(row.avg_reliability * 100).toFixed(1)}%
             </TableCell>
-            <TableCell className={`text-right font-mono text-sm ${row.delta_pct != null && row.delta_pct > 0 ? "text-red-400" : row.delta_pct != null && row.delta_pct < 0 ? "text-amber-400" : "text-slate-400"}`}>
-              {row.delta_pct != null ? `${SIGN(row.delta_pct)}${row.delta_pct}%` : "—"}
+            <TableCell className="text-right font-mono text-slate-300">
+              {row.discrepancy_pct.toFixed(1)}%
             </TableCell>
-            <TableCell className="text-right"><EstadoPill estado={row.estado_comercial} /></TableCell>
+            <TableCell className="text-right font-mono text-slate-300">
+              {row.avg_delay_days.toFixed(1)} d
+            </TableCell>
+            <TableCell className={`text-right font-mono font-bold ${riskTextColor(row.risk_score)}`}>
+              {row.risk_score.toFixed(1)}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -51,12 +84,46 @@ function CommercialTable({ rows }: { rows: CommercialImpactRow[] }) {
   );
 }
 
-export function RiskTab({ risk, commercial }: Props) {
-  const [showCommercialAll, setShowCommercialAll] = useState(false);
+function FragilityTable({ rows }: { rows: BuyerFragilityRow[] }) {
+  return (
+    <Table>
+      <TableHead>
+        <TableRow>
+          <TableHeaderCell className="text-slate-400">Comprador</TableHeaderCell>
+          <TableHeaderCell className="text-slate-400">Región</TableHeaderCell>
+          <TableHeaderCell className="text-slate-400 text-right">Proveedores</TableHeaderCell>
+          <TableHeaderCell className="text-slate-400 text-right">Dependencia Top %</TableHeaderCell>
+          <TableHeaderCell className="text-slate-400 text-right">Volumen Total (€)</TableHeaderCell>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {rows.map((row) => (
+          <TableRow key={row.buyer}>
+            <TableCell className="text-white">{row.buyer}</TableCell>
+            <TableCell className="text-slate-400">{row.region}</TableCell>
+            <TableCell className="text-right font-mono text-slate-300">{row.supplier_count}</TableCell>
+            <TableCell className={`text-right font-mono font-semibold ${fragilityTextColor(row.top_supplier_pct)}`}>
+              {row.top_supplier_pct.toFixed(1)}%
+            </TableCell>
+            <TableCell className="text-right font-mono text-slate-300">
+              {EUR(row.total_volume_eur, 0)} €
+            </TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  );
+}
 
-  const cmSobre = commercial.filter((r) => r.estado_comercial === "SOBREFACTURADO").length;
-  const cmSub   = commercial.filter((r) => r.estado_comercial === "SUBFACTURADO").length;
-  const cmOk    = commercial.filter((r) => r.estado_comercial === "CONFORME").length;
+interface Props {
+  risk:      RiskData | null;
+  scores:    SupplierScoreRow[];
+  fragility: BuyerFragilityRow[];
+}
+
+export function RiskTab({ risk, scores, fragility }: Props) {
+  const [showScoresAll,    setShowScoresAll]    = useState(false);
+  const [showFragilityAll, setShowFragilityAll] = useState(false);
 
   const restPct   = risk ? Math.max(0, 100 - risk.concentration_pct) : 0;
   const donutData = risk
@@ -65,13 +132,18 @@ export function RiskTab({ risk, commercial }: Props) {
         { name: "Resto de la red",               value: restPct },
       ]
     : [];
+  const maxScore = scores.length > 0 ? Math.max(...scores.map((r) => r.risk_score), 1) : 100;
 
   return (
     <div className="space-y-10">
 
-      {/* Concentración de riesgo */}
+      {/* ── 01 · CONCENTRACIÓN DE RIESGO ────────────────────────── */}
       <section>
-        <h2 className="text-lg font-semibold text-white mb-4">Concentración de Riesgo</h2>
+        <SectionLabel
+          index="01 /"
+          title="Concentración de Riesgo"
+          subtitle={`% de enlaces SUPPLIES acaparados por los top-${risk?.top_n ?? 10} proveedores. Un valor alto indica dependencia peligrosa de pocos actores.`}
+        />
         {!risk ? EMPTY : (
           <Grid numItemsSm={1} numItemsLg={3} className="gap-6">
             <Card decoration="top" decorationColor="red" className="bg-[#1E212B] border-slate-800 flex flex-col justify-between">
@@ -120,46 +192,96 @@ export function RiskTab({ risk, commercial }: Props) {
         )}
       </section>
 
-      {/* Impacto Comercial */}
-      <section>
-        <h2 className="text-lg font-semibold text-white mb-1">Impacto Comercial</h2>
-        <p className="text-slate-400 text-sm mb-4">
-          Desviación entre importe del pedido y total facturado. Tolerancia ±5%.
-        </p>
-        {commercial.length === 0 ? EMPTY : (
-          <div className="space-y-4">
-            <Grid numItemsSm={3} className="gap-4">
-              <Card className="bg-red-950/40 border-red-800 text-center">
-                <Text className="text-red-400 text-sm">Sobrefacturados</Text>
-                <Metric className="text-red-300 mt-1">{cmSobre}</Metric>
-              </Card>
-              <Card className="bg-amber-950/40 border-amber-800 text-center">
-                <Text className="text-amber-400 text-sm">Subfacturados</Text>
-                <Metric className="text-amber-300 mt-1">{cmSub}</Metric>
-              </Card>
-              <Card className="bg-emerald-950/40 border-emerald-800 text-center">
-                <Text className="text-emerald-400 text-sm">Conformes</Text>
-                <Metric className="text-emerald-300 mt-1">{cmOk}</Metric>
-              </Card>
-            </Grid>
-            <Card className="bg-[#1E212B] border-slate-800">
-              <div className="overflow-auto">
-                <CommercialTable rows={commercial.slice(0, PAGE)} />
-              </div>
-              {commercial.length > PAGE && (
-                <ShowMoreButton total={commercial.length} onClick={() => setShowCommercialAll(true)} />
-              )}
-            </Card>
-          </div>
-        )}
-      </section>
+      {/* ── 02 · ÍNDICE DE RIESGO DE PROVEEDOR ──────────────────── */}
+      {scores.length > 0 && (
+        <section>
+          <SectionLabel
+            index="02 /"
+            title="Índice de Riesgo de Proveedor"
+            subtitle="Score 0–100 combinando fiabilidad (40 %), discrepancias (35 %) y retraso de entrega (25 %). Mayor score = mayor riesgo."
+          />
+          <Card className="bg-[#1E212B] border-slate-800">
+            <div className="space-y-3 mb-4">
+              {scores.slice(0, PAGE).map((row, i) => (
+                <div key={row.supplier}>
+                  <Flex className="mb-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-slate-500 text-xs w-5 shrink-0">{i + 1}</span>
+                      <span className="text-white text-sm truncate">{row.supplier}</span>
+                      <span className="text-slate-600 text-xs shrink-0">({row.supply_degree} links)</span>
+                    </div>
+                    <span className={`font-mono font-bold text-sm shrink-0 ${riskTextColor(row.risk_score)}`}>
+                      {row.risk_score.toFixed(1)}
+                    </span>
+                  </Flex>
+                  <ProgressBar
+                    value={(row.risk_score / maxScore) * 100}
+                    color={riskBarColor(row.risk_score)}
+                    className="h-1.5"
+                  />
+                </div>
+              ))}
+            </div>
+            {scores.length > PAGE && (
+              <ShowMoreButton total={scores.length} onClick={() => setShowScoresAll(true)} />
+            )}
+          </Card>
+        </section>
+      )}
+
+      {/* ── 03 · FRAGILIDAD DEL COMPRADOR ───────────────────────── */}
+      {fragility.length > 0 && (
+        <section>
+          <SectionLabel
+            index="03 /"
+            title="Fragilidad del Comprador"
+            subtitle="% del volumen total de compra controlado por un único proveedor. Valores altos indican dependencia crítica."
+          />
+          <Card className="bg-[#1E212B] border-slate-800">
+            <div className="space-y-3 mb-4">
+              {fragility.slice(0, PAGE).map((row, i) => (
+                <div key={row.buyer}>
+                  <Flex className="mb-1">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-slate-500 text-xs w-5 shrink-0">{i + 1}</span>
+                      <span className="text-white text-sm truncate">{row.buyer}</span>
+                      <span className="text-slate-500 text-xs shrink-0">{row.region}</span>
+                      <span className="text-slate-600 text-xs shrink-0">({row.supplier_count} provs.)</span>
+                    </div>
+                    <span className={`font-mono text-sm shrink-0 ${fragilityTextColor(row.top_supplier_pct)}`}>
+                      {row.top_supplier_pct.toFixed(1)}%
+                    </span>
+                  </Flex>
+                  <ProgressBar
+                    value={row.top_supplier_pct}
+                    color={fragilityBarColor(row.top_supplier_pct)}
+                    className="h-1.5"
+                  />
+                </div>
+              ))}
+            </div>
+            {fragility.length > PAGE && (
+              <ShowMoreButton total={fragility.length} onClick={() => setShowFragilityAll(true)} />
+            )}
+          </Card>
+        </section>
+      )}
+
+      {/* ── MODALS ──────────────────────────────────────────────── */}
+      <SectionModal
+        title="Índice de Riesgo — todos los proveedores"
+        open={showScoresAll}
+        onClose={() => setShowScoresAll(false)}
+      >
+        <ScoresTable rows={scores} />
+      </SectionModal>
 
       <SectionModal
-        title="Impacto Comercial — completo"
-        open={showCommercialAll}
-        onClose={() => setShowCommercialAll(false)}
+        title="Fragilidad del Comprador — completo"
+        open={showFragilityAll}
+        onClose={() => setShowFragilityAll(false)}
       >
-        <CommercialTable rows={commercial} />
+        <FragilityTable rows={fragility} />
       </SectionModal>
 
     </div>

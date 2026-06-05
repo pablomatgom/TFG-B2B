@@ -103,38 +103,59 @@ def run_analyze(settings: Settings) -> Path:
         )
         
         # ── Risk & operational ───────────────────────────────────────────────
-        # commercial_impact_path = _safe_df(
-        #     "compute_commercial_impact",
-        #     lambda: analyzer.compute_commercial_impact(limit=100),
-        #     export_dir, "commercial_impact.json",
-        # )
-        # risk_path = _safe_dict(
-        #     "get_supplier_risk_concentration",
-        #     lambda: analyzer.get_supplier_risk_concentration(top_n=10),
-        #     export_dir, "risk_concentration.json",
-        # )
-        # discrepancy_sup_path = _safe_df(
-        #     "get_discrepancy_rate_by_supplier",
-        #     analyzer.get_discrepancy_rate_by_supplier,
-        #     export_dir, "discrepancy_by_supplier.json",
-        # )
-        # lead_time_path = _safe_df(
-        #     "get_lead_time_compliance",
-        #     analyzer.get_lead_time_compliance,
-        #     export_dir, "lead_time_compliance.json",
-        # )
-        # payment_path = _safe_df(
-        #     "get_payment_terms_exposure",
-        #     analyzer.get_payment_terms_exposure,
-        #     export_dir, "payment_exposure.json",
-        # )
+        commercial_impact_path = _safe_df(
+            "compute_commercial_impact",
+            lambda: analyzer.compute_commercial_impact(limit=100),
+            export_dir, "commercial_impact.json",
+        )
+        risk_path = _safe_dict(
+            "get_supplier_risk_concentration",
+            lambda: analyzer.get_supplier_risk_concentration(top_n=10),
+            export_dir, "risk_concentration.json",
+        )
+        discrepancy_sup_path = _safe_df(
+            "get_discrepancy_rate_by_supplier",
+            analyzer.get_discrepancy_rate_by_supplier,
+            export_dir, "discrepancy_by_supplier.json",
+        )
+        lead_time_path = _safe_df(
+            "get_lead_time_compliance",
+            analyzer.get_lead_time_compliance,
+            export_dir, "lead_time_compliance.json",
+        )
+        payment_path = _safe_df(
+            "get_payment_terms_exposure",
+            analyzer.get_payment_terms_exposure,
+            export_dir, "payment_exposure.json",
+        )
+        supplier_score_path = _safe_df(
+            "compute_supplier_risk_score",
+            lambda: analyzer.compute_supplier_risk_score(min_invoices=3),
+            export_dir, "supplier_risk_score.json",
+        )
+        buyer_fragility_path = _safe_df(
+            "get_buyer_fragility",
+            analyzer.get_buyer_fragility,
+            export_dir, "buyer_fragility.json",
+        )
+        overdue_path = _safe_df(
+            "get_overdue_exposure",
+            analyzer.get_overdue_exposure,
+            export_dir, "overdue_exposure.json",
+        )
+        contract_profile_path = _safe_dict(
+            "get_contract_profile",
+            analyzer.get_contract_profile,
+            export_dir, "contract_profile.json",
+        )
 
     exported = [
         p.name for p in [
             macro_path, temporal_path,
             backward_path, exact_paths_path, forward_path,
             bottlenecks_path, communities_path, pagerank_path, wcc_path,
-            # risk_path, discrepancy_sup_path, lead_time_path, payment_path,
+            commercial_impact_path, risk_path, discrepancy_sup_path, lead_time_path, payment_path,
+            supplier_score_path, buyer_fragility_path, overdue_path, contract_profile_path,
         ]
         if p is not None
     ]

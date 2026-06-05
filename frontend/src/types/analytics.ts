@@ -90,6 +90,40 @@ export interface CommercialImpactRow {
   estado_comercial: "SOBREFACTURADO" | "SUBFACTURADO" | "CONFORME";
 }
 
+export interface SupplierScoreRow {
+  supplier: string;
+  avg_reliability: number;
+  discrepancy_pct: number;
+  avg_delay_days: number;
+  supply_degree: number;
+  risk_score: number;
+}
+
+export interface BuyerFragilityRow {
+  buyer: string;
+  node_role: string;
+  region: string;
+  supplier_count: number;
+  top_supplier_pct: number;
+  total_volume_eur: number;
+}
+
+export interface OverdueRow {
+  supplier: string;
+  buyer: string;
+  overdue_invoices: number;
+  total_overdue_eur: number;
+  avg_payment_days: number;
+}
+
+export interface ContractProfileData {
+  contract_type_distribution: Record<string, number>;
+  exclusivity_pct: number;
+  avg_reliability_score: number;
+  avg_payment_terms_days: number;
+  avg_contract_age_days: number;
+}
+
 export interface WccData {
   total_components: number;
   main_component_size: number;

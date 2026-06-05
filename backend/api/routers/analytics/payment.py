@@ -4,9 +4,9 @@ from fastapi import APIRouter
 
 from backend.api.dependencies import read_json
 
-router = APIRouter()
+router = APIRouter(prefix="/payment")
 
 
-@router.get("/payment")
+@router.get("")
 def get_payment_exposure():
     return read_json("payment_exposure.json", default=[])

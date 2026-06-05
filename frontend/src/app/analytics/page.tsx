@@ -11,12 +11,14 @@ import {
   CurrencyEuroIcon,
   LinkIcon,
   CpuChipIcon,
+  DocumentTextIcon,
 } from "@heroicons/react/24/outline";
 import { API_BASE } from "@/lib/api";
 import { LoadingState } from "@/components/ui/LoadingState";
 import type {
   RiskData, DiscrepancyRow, LeadTimeRow, PaymentRow,
   LineageRow, GdsData, ExactPathRow, ForwardRow, CommercialImpactRow,
+  SupplierScoreRow, BuyerFragilityRow, OverdueRow, ContractProfileData,
 } from "@/types/analytics";
 import { RiskTab }          from "@/components/analytics/RiskTab";
 import { DiscrepanciesTab } from "@/components/analytics/DiscrepanciesTab";
@@ -24,6 +26,7 @@ import { LeadTimeTab }      from "@/components/analytics/LeadTimeTab";
 import { ExposureTab }      from "@/components/analytics/ExposureTab";
 import { TraceabilityTab }  from "@/components/analytics/TraceabilityTab";
 import { GdsTab }           from "@/components/analytics/GdsTab";
+import { ContractsTab }     from "@/components/analytics/ContractsTab";
 
 const TAB_LABELS = [
   "Cargando análisis de riesgo…",
@@ -32,6 +35,7 @@ const TAB_LABELS = [
   "Cargando exposición financiera…",
   "Cargando trazabilidad…",
   "Cargando GDS…",
+  "Cargando perfil de contratos…",
 ];
 
 export default function AnalyticsPage() {
@@ -40,14 +44,18 @@ export default function AnalyticsPage() {
   const fetchedRef                    = useRef<Set<number>>(new Set());
 
   const [risk, setRisk]               = useState<RiskData | null>(null);
-  const [commercial, setCommercial]   = useState<CommercialImpactRow[]>([]);
+  const [scores, setScores]           = useState<SupplierScoreRow[]>([]);
+  const [fragility, setFragility]     = useState<BuyerFragilityRow[]>([]);
   const [discrepancy, setDiscrepancy] = useState<DiscrepancyRow[]>([]);
+  const [commercial, setCommercial]   = useState<CommercialImpactRow[]>([]);
   const [leadTime, setLeadTime]       = useState<LeadTimeRow[]>([]);
   const [payment, setPayment]         = useState<PaymentRow[]>([]);
+  const [overdueRows, setOverdueRows] = useState<OverdueRow[]>([]);
   const [lineage, setLineage]         = useState<LineageRow[]>([]);
-  const [gds, setGds]                 = useState<GdsData>({ bottlenecks: [], communities: [], pagerank: [], wcc: {} as GdsData["wcc"] });
   const [exactPaths, setExactPaths]   = useState<ExactPathRow[]>([]);
   const [forward, setForward]         = useState<ForwardRow[]>([]);
+  const [gds, setGds]                 = useState<GdsData>({ bottlenecks: [], communities: [], pagerank: [], wcc: {} as GdsData["wcc"] });
+  const [contracts, setContracts]     = useState<ContractProfileData | null>(null);
 
   const fetchForTab = async (tab: number) => {
     if (fetchedRef.current.has(tab)) return;
@@ -57,17 +65,25 @@ export default function AnalyticsPage() {
     try {
       switch (tab) {
         case 0: {
-          const [riskD, comD] = await Promise.all([
+          // Tab Riesgo: concentración + score compuesto + fragilidad de comprador
+          const [riskD, scoresD, fragD] = await Promise.all([
             fetch(`${API_BASE}/api/analytics/risk`).then((r) => r.json()),
-            fetch(`${API_BASE}/api/analytics/lineage/commercial-impact`).then((r) => r.json()),
+            fetch(`${API_BASE}/api/analytics/risk/supplier-score`).then((r) => r.json()),
+            fetch(`${API_BASE}/api/analytics/risk/buyer-fragility`).then((r) => r.json()),
           ]);
           setRisk(riskD?.total_supplies_edges ? riskD : null);
-          setCommercial(Array.isArray(comD) ? comD : []);
+          setScores(Array.isArray(scoresD) ? scoresD : []);
+          setFragility(Array.isArray(fragD) ? fragD : []);
           break;
         }
         case 1: {
-          const discD = await fetch(`${API_BASE}/api/analytics/discrepancy-suppliers`).then((r) => r.json());
+          // Tab Discrepancias: tasa por proveedor + impacto comercial por pedido
+          const [discD, comD] = await Promise.all([
+            fetch(`${API_BASE}/api/analytics/discrepancy-suppliers`).then((r) => r.json()),
+            fetch(`${API_BASE}/api/analytics/risk/commercial-impact`).then((r) => r.json()),
+          ]);
           setDiscrepancy(Array.isArray(discD) ? discD : []);
+          setCommercial(Array.isArray(comD) ? comD : []);
           break;
         }
         case 2: {
@@ -76,8 +92,13 @@ export default function AnalyticsPage() {
           break;
         }
         case 3: {
-          const payD = await fetch(`${API_BASE}/api/analytics/payment`).then((r) => r.json());
+          // Tab Exposición: plazos de pago + facturas vencidas
+          const [payD, overdueD] = await Promise.all([
+            fetch(`${API_BASE}/api/analytics/payment`).then((r) => r.json()),
+            fetch(`${API_BASE}/api/analytics/risk/overdue`).then((r) => r.json()),
+          ]);
           setPayment(Array.isArray(payD) ? payD : []);
+          setOverdueRows(Array.isArray(overdueD) ? overdueD : []);
           break;
         }
         case 4: {
@@ -96,6 +117,12 @@ export default function AnalyticsPage() {
           setGds(gdsD || { bottlenecks: [], communities: [] });
           break;
         }
+        case 6: {
+          // Tab Contratos: perfil estructural de la red de acuerdos SUPPLIES
+          const contractsD = await fetch(`${API_BASE}/api/analytics/risk/contracts`).then((r) => r.json());
+          setContracts(contractsD?.contract_type_distribution ? contractsD : null);
+          break;
+        }
       }
     } catch (err) {
       console.error(`Tab ${tab} fetch failed:`, err);
@@ -104,7 +131,6 @@ export default function AnalyticsPage() {
     }
   };
 
-  // Load the first tab on mount
   useEffect(() => { fetchForTab(0); }, []);
 
   const handleTabChange = (index: number) => {
@@ -129,18 +155,19 @@ export default function AnalyticsPage() {
           <Tab icon={CurrencyEuroIcon}>Exposición</Tab>
           <Tab icon={LinkIcon}>Trazabilidad</Tab>
           <Tab icon={CpuChipIcon}>GDS</Tab>
+          <Tab icon={DocumentTextIcon}>Contratos</Tab>
         </TabList>
 
         <TabPanels>
           <TabPanel>
             {loadingTab === 0
               ? <LoadingState text={TAB_LABELS[0]} />
-              : <RiskTab risk={risk} commercial={commercial} />}
+              : <RiskTab risk={risk} scores={scores} fragility={fragility} />}
           </TabPanel>
           <TabPanel>
             {loadingTab === 1
               ? <LoadingState text={TAB_LABELS[1]} />
-              : <DiscrepanciesTab discrepancy={discrepancy} />}
+              : <DiscrepanciesTab discrepancy={discrepancy} commercial={commercial} />}
           </TabPanel>
           <TabPanel>
             {loadingTab === 2
@@ -150,7 +177,7 @@ export default function AnalyticsPage() {
           <TabPanel>
             {loadingTab === 3
               ? <LoadingState text={TAB_LABELS[3]} />
-              : <ExposureTab payment={payment} />}
+              : <ExposureTab payment={payment} overdue={overdueRows} />}
           </TabPanel>
           <TabPanel>
             {loadingTab === 4
@@ -161,6 +188,11 @@ export default function AnalyticsPage() {
             {loadingTab === 5
               ? <LoadingState text={TAB_LABELS[5]} />
               : <GdsTab gds={gds} />}
+          </TabPanel>
+          <TabPanel>
+            {loadingTab === 6
+              ? <LoadingState text={TAB_LABELS[6]} />
+              : <ContractsTab contracts={contracts} />}
           </TabPanel>
         </TabPanels>
       </TabGroup>
