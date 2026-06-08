@@ -148,6 +148,26 @@ def run_analyze(settings: Settings) -> Path:
             analyzer.get_contract_profile,
             export_dir, "contract_profile.json",
         )
+        contract_detail_path = _safe_df(
+            "get_contract_detail",
+            analyzer.get_contract_detail,
+            export_dir, "contract_detail.json",
+        )
+        geographic_risk_path = _safe_df(
+            "get_geographic_risk",
+            analyzer.get_geographic_risk,
+            export_dir, "geographic_risk.json",
+        )
+        cross_suppliers_path = _safe_df(
+            "get_cross_dimensional_suppliers",
+            lambda: analyzer.get_cross_dimensional_suppliers(min_invoices=3),
+            export_dir, "cross_suppliers.json",
+        )
+        cross_buyers_path = _safe_df(
+            "get_cross_dimensional_buyers",
+            analyzer.get_cross_dimensional_buyers,
+            export_dir, "cross_buyers.json",
+        )
 
     exported = [
         p.name for p in [
@@ -156,6 +176,7 @@ def run_analyze(settings: Settings) -> Path:
             bottlenecks_path, communities_path, pagerank_path, wcc_path,
             commercial_impact_path, risk_path, discrepancy_sup_path, lead_time_path, payment_path,
             supplier_score_path, buyer_fragility_path, overdue_path, contract_profile_path,
+            contract_detail_path, geographic_risk_path, cross_suppliers_path, cross_buyers_path,
         ]
         if p is not None
     ]

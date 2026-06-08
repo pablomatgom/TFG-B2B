@@ -33,89 +33,79 @@ export default function TemporalSection({ data }: TemporalSectionProps) {
 
   const stats = [
     {
-      icon:   HashtagIcon,
-      label:  "Total documentos",
-      value:  totalDocs > 0 ? totalDocs.toLocaleString("es") : "—",
-      sub:    "en toda la serie",
-      iconBg: "bg-[var(--primary-dim)]",
-      color:  "text-[var(--primary)]",
+      icon:       HashtagIcon,
+      label:      "Total documentos",
+      value:      totalDocs > 0 ? totalDocs.toLocaleString("es") : "—",
+      sub:        "en toda la serie",
     },
     {
-      icon:   ArrowTrendingUpIcon,
-      label:  "Mes pico",
-      value:  peakRow ? peakRow.documents.toLocaleString("es") : "—",
-      sub:    peakRow?.date ?? "—",
-      iconBg: "bg-violet-500/10",
-      color:  "text-violet-400",
+      icon:       ArrowTrendingUpIcon,
+      label:      "Mes pico",
+      value:      peakRow ? peakRow.documents.toLocaleString("es") : "—",
+      sub:        peakRow?.date ?? "—",
     },
     {
-      icon:   CalendarDaysIcon,
-      label:  "Período activo",
-      value:  data.length > 0 ? `${data.length} meses` : "—",
-      sub:    spanLabel,
-      iconBg: "bg-blue-500/10",
-      color:  "text-blue-400",
+      icon:       CalendarDaysIcon,
+      label:      "Período activo",
+      value:      data.length > 0 ? `${data.length} meses` : "—",
+      sub:        spanLabel,
     },
     {
-      icon:   ExclamationTriangleIcon,
-      label:  "Docs irregulares",
-      value:  totalFlagged > 0 ? totalFlagged.toLocaleString("es") : "—",
-      sub:    totalDocs > 0
+      icon:       ExclamationTriangleIcon,
+      label:      "Docs irregulares",
+      value:      totalFlagged > 0 ? totalFlagged.toLocaleString("es") : "—",
+      sub:        totalDocs > 0
         ? `${((totalFlagged / totalDocs) * 100).toFixed(1)}% del total`
         : "—",
-      iconBg: "bg-red-500/10",
-      color:  "text-red-400",
     },
   ];
 
   return (
-    <div className="animate-fade-up stagger-1 relative overflow-hidden bg-slate-900/40 backdrop-blur-xl border border-[oklch(0.60_0.128_158/0.28)] rounded-2xl shadow-lg shadow-[oklch(0.60_0.128_158/0.10)]">
-      <div aria-hidden className="pointer-events-none absolute bottom-0 left-1/2 -translate-x-1/2 w-3/4 h-32 bg-[oklch(0.60_0.128_158/0.12)] blur-[80px] rounded-full" />
-      <div aria-hidden className="absolute inset-x-0 top-0 h-[2px] bg-gradient-to-r from-transparent via-[oklch(0.60_0.128_158/0.60)] to-transparent" />
+    <div className="animate-fade-up stagger-1 bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
 
+      {/* Header */}
       <div className="px-6 pt-6 pb-2">
         <SectionHeader
           icon={ChartBarIcon}
           title="Evolución de Transacciones Documentales"
           subtitle="Documentos totales e irregulares (discrepancia) por mes."
+          iconColor="text-gray-500"
+          iconBg="bg-gray-100"
         />
       </div>
 
       {data.length > 0 ? (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 px-6 mb-6">
+          {/* Stats strip — gap-px + bg-gray-100 creates 1px dividers */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-gray-100 border-y border-gray-100">
             {stats.map((s) => (
-              <div
-                key={s.label}
-                className="px-4 py-3 bg-[var(--bg-surface)] border border-[var(--border-base)] rounded-xl hover:bg-[var(--bg-elevated)] transition-colors"
-              >
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <div className={`p-1 ${s.iconBg} rounded`}>
-                    <s.icon className={`w-3.5 h-3.5 ${s.color}`} aria-hidden />
-                  </div>
-                  <span className="text-[var(--text-secondary)] text-[11px] font-semibold">
+              <div key={s.label} className="bg-white px-5 py-4">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <s.icon className="w-3.5 h-3.5 text-gray-400 shrink-0" aria-hidden />
+                  <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-gray-400 truncate">
                     {s.label}
                   </span>
                 </div>
-                <p className={`text-xl font-black tabular-nums tracking-tight ${s.color}`}>
+                <p className={`text-xl font-black tabular-nums leading-none text-gray-900`}>
                   {s.value}
                 </p>
-                <p className="text-[var(--text-muted)] text-[10px] mt-0.5 font-mono truncate">
+                <p className="text-[10px] font-mono text-gray-400 mt-1 truncate">
                   {s.sub}
                 </p>
               </div>
             ))}
           </div>
 
-          <div className="px-6 pb-6">
+          {/* Chart */}
+          <div className="px-6 py-6">
             <TemporalAreaChart data={data} />
           </div>
         </>
       ) : (
         <div className="h-72 flex flex-col items-center justify-center px-6 pb-6 text-center">
-          <ChartBarIcon className="w-8 h-8 text-[var(--text-muted)] mb-3" />
-          <p className="text-[var(--text-secondary)] text-sm font-medium">Sin datos temporales</p>
-          <p className="text-[var(--text-muted)] text-xs mt-1">
+          <ChartBarIcon className="w-8 h-8 text-gray-300 mb-3" />
+          <p className="text-gray-500 text-sm font-medium">Sin datos temporales</p>
+          <p className="text-gray-400 text-xs mt-1">
             Ejecuta el pipeline para visualizar el flujo de documentos.
           </p>
         </div>

@@ -79,19 +79,47 @@ _Q_DOC_TYPES = (
 
 _Q_TEMPORAL = """
     MATCH (d:Document)-[:Issue_on]->(tb:TimeBucket)
+    WITH tb.year  AS year,
+         tb.month AS month,
+         count(d) AS documents,
+         count(CASE WHEN d.discrepancy_flag = true THEN 1 END) AS flagged,
+         round(
+             sum(CASE WHEN d.doc_type = 'INVOICE'
+                      THEN toFloat(coalesce(d.gross_amount, 0))
+                      ELSE 0 END),
+             2
+         ) AS total_gross_eur,
+         collect(d) AS month_docs
+    CALL {
+        WITH month_docs
+        UNWIND month_docs AS d
+        MATCH (c:Company)-[:ISSUES]->(d)
+        RETURN count(DISTINCT c) AS active_companies
+    }
+    CALL {
+        WITH month_docs
+        UNWIND month_docs AS d
+        MATCH (d)-[:CONTAINS]->(p:Product)
+        RETURN count(DISTINCT p) AS active_products
+    }
+    CALL {
+        WITH month_docs
+        UNWIND month_docs AS d
+        MATCH (issuer:Company)-[:ISSUES]->(d)-[:SENT_TO]->(buyer:Company)
+        RETURN count(DISTINCT (issuer.company_id + '|' + buyer.company_id)) AS active_connections
+    }
     RETURN
-        tb.year  AS year,
-        tb.month AS month,
-        count(d) AS documents,
-        count(CASE WHEN d.discrepancy_flag = true THEN 1 END) AS flagged,
-        round(
-            sum(CASE WHEN d.doc_type = 'INVOICE'
-                     THEN toFloat(coalesce(d.gross_amount, 0))
-                     ELSE 0 END),
-            2
-        ) AS total_gross_eur
+        year,
+        month,
+        documents,
+        flagged,
+        total_gross_eur,
+        active_companies,
+        active_products,
+        active_connections
     ORDER BY year, month
 """
+
 
 # ─── Geographic distribution ──────────────────────────────────────────────────
 

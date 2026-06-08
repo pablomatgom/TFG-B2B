@@ -49,13 +49,16 @@ export interface MacroStats {
 }
 
 export interface TemporalSeriesRow {
-  year:           number;
-  month:          number;
-  documents:      number;
-  flagged:        number;
-  total_gross_eur: number;
+  year:              number;
+  month:             number;
+  documents:         number;
+  flagged:           number;
+  total_gross_eur:   number;
+  active_companies:   number;
+  active_products:    number;
+  active_connections: number;
   /** Computed by the frontend: `"YYYY-MM"`. */
-  date?:          string;
+  date?:             string;
 }
 
 export interface DashboardResponse {

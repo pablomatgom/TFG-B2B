@@ -8,76 +8,53 @@ import {
 } from "@heroicons/react/24/outline";
 
 const KPI_CONFIG = [
-  {
-    label:     "Empresas Activas",
-    key:       "Company",
-    icon:      BuildingOffice2Icon,
-    iconBg:    "bg-blue-500/10",
-    iconColor: "text-blue-400",
-    accent:    "from-blue-500/40 to-transparent",
-    border:    "border-blue-500/20 hover:border-blue-500/40",
-    glow:      "hover:shadow-blue-500/10",
-  },
-  {
-    label:     "Catálogo Productos",
-    key:       "Product",
-    icon:      CubeIcon,
-    iconBg:    "bg-purple-500/10",
-    iconColor: "text-purple-400",
-    accent:    "from-purple-500/40 to-transparent",
-    border:    "border-purple-500/20 hover:border-purple-500/40",
-    glow:      "hover:shadow-purple-500/10",
-  },
-  {
-    label:     "Documentos EDI",
-    key:       "Document",
-    icon:      DocumentTextIcon,
-    iconBg:    "bg-amber-500/10",
-    iconColor: "text-amber-400",
-    accent:    "from-amber-500/40 to-transparent",
-    border:    "border-amber-500/20 hover:border-amber-500/40",
-    glow:      "hover:shadow-amber-500/10",
-  },
-  {
-    label:     "Total Conexiones",
-    key:       "__total_edges__",
-    icon:      ArrowsRightLeftIcon,
-    iconBg:    "bg-emerald-500/10",
-    iconColor: "text-emerald-400",
-    accent:    "from-emerald-500/40 to-transparent",
-    border:    "border-emerald-500/20 hover:border-emerald-500/40",
-    glow:      "hover:shadow-emerald-500/10",
-  },
+  { label: "Empresas Activas",   key: "Company",        icon: BuildingOffice2Icon },
+  { label: "Catálogo Productos", key: "Product",        icon: CubeIcon            },
+  { label: "Documentos EDI",     key: "Document",       icon: DocumentTextIcon    },
+  { label: "Total Conexiones",   key: "__total_edges__", icon: ArrowsRightLeftIcon },
 ] as const;
 
 const STAGGER = ["stagger-1", "stagger-2", "stagger-3", "stagger-4"] as const;
 
 interface KpiGridProps {
   values: Record<string, number>;
+  trends?: Record<string, number>;
 }
 
-export default function KpiGrid({ values }: KpiGridProps) {
+export default function KpiGrid({ values, trends }: KpiGridProps) {
   return (
     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-      {KPI_CONFIG.map((kpi, i) => (
-        <div
-          key={kpi.label}
-          className={`animate-fade-up ${STAGGER[i]} relative overflow-hidden bg-white/[0.04] rounded-2xl border ${kpi.border} p-5 flex items-center gap-4 transition-all duration-200 hover:bg-white/[0.07] hover:shadow-lg ${kpi.glow}`}
-        >
-          <div aria-hidden className={`absolute inset-x-0 top-0 h-px bg-gradient-to-r ${kpi.accent}`} />
-          <div className={`p-2.5 ${kpi.iconBg} rounded-xl shrink-0`}>
-            <kpi.icon className={`w-5 h-5 ${kpi.iconColor}`} aria-hidden />
-          </div>
-          <div className="min-w-0">
-            <p className="text-[var(--text-muted)] text-[0.65rem] uppercase font-semibold tracking-[0.1em] leading-tight truncate">
-              {kpi.label}
-            </p>
-            <p className="text-[var(--text-primary)] text-2xl font-black mt-0.5 tabular-nums">
+      {KPI_CONFIG.map((kpi, i) => {
+        const delta = trends?.[kpi.key] ?? null;
+        return (
+          <div
+            key={kpi.label}
+            className={`animate-fade-up ${STAGGER[i]} bg-white rounded-xl border border-gray-200 shadow-sm p-5 hover:shadow-md hover:border-gray-300 transition-all duration-200`}
+          >
+            {/* Top row: icon + label + delta */}
+            <div className="flex items-center gap-2">
+              <kpi.icon className="w-4 h-4 text-gray-400 shrink-0" aria-hidden />
+              <span className="text-xs text-gray-500 font-medium truncate flex-1">
+                {kpi.label}
+              </span>
+              {delta !== null && (
+                <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-md shrink-0 ${
+                  delta >= 0
+                    ? "text-emerald-700 bg-emerald-50"
+                    : "text-red-600 bg-red-50"
+                }`}>
+                  {delta >= 0 ? "+" : ""}{delta.toFixed(1)}%
+                </span>
+              )}
+            </div>
+
+            {/* Big number */}
+            <p className="text-3xl font-black text-gray-900 tabular-nums leading-none mt-4">
               {(values[kpi.key] ?? 0).toLocaleString("es")}
             </p>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
