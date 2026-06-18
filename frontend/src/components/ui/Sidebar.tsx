@@ -180,7 +180,7 @@ function NavSkeleton() {
 }
 
 /* ── Main sidebar component ───────────────────────────── */
-export default function Sidebar() {
+export default function Sidebar({ open, onClose }: { open?: boolean; onClose?: () => void }) {
   const dbStatus = useDbStatus();
 
   const dotColor =
@@ -194,7 +194,7 @@ export default function Sidebar() {
     "Checking";
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-60 flex flex-col bg-gray-900 border-r border-gray-800 z-40">
+    <aside className={`fixed left-0 top-0 h-screen w-60 flex flex-col bg-gray-900 border-r border-gray-800 z-40 transition-transform duration-300 ease-in-out lg:translate-x-0 ${open ? "translate-x-0" : "-translate-x-full"}`}>
 
       {/* ── Logo + status ──────────────────────────────── */}
       <div className="px-4 pt-4 pb-3 border-b border-gray-800 shrink-0">
