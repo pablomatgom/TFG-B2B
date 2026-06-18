@@ -110,7 +110,7 @@ def run_analyze(settings: Settings) -> Path:
         )
         risk_path = _safe_dict(
             "get_supplier_risk_concentration",
-            lambda: analyzer.get_supplier_risk_concentration(top_n=10),
+            lambda: analyzer.get_supplier_risk_concentration(top_n=25),
             export_dir, "risk_concentration.json",
         )
         discrepancy_sup_path = _safe_df(

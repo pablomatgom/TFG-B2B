@@ -30,3 +30,19 @@ def get_overdue_exposure():
 @router.get("/contracts")
 def get_contract_profile():
     return read_json("contract_profile.json", default={})
+
+@router.get("/contracts-detail")
+def get_contract_detail():
+    return read_json("contract_detail.json", default=[])
+
+@router.get("/geographic")
+def get_geographic_risk():
+    return read_json("geographic_risk.json", default=[])
+
+@router.get("/synthesis/suppliers")
+def get_cross_suppliers():
+    return read_json("cross_suppliers.json", default=[])
+
+@router.get("/synthesis/buyers")
+def get_cross_buyers():
+    return read_json("cross_buyers.json", default=[])

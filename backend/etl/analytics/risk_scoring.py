@@ -5,6 +5,26 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+# ─── Per-supplier contract breakdown: type mix, exclusivity, reliability ──────
+
+_Q_CONTRACT_DETAIL = """
+    MATCH (sup:Company)-[s:SUPPLIES]->(buyer:Company)
+    WITH sup.legal_name                                                           AS supplier,
+         sup.region                                                               AS region,
+         count(s)                                                                 AS total_contracts,
+         collect(DISTINCT s.contract_type)                                        AS contract_types,
+         count(CASE WHEN s.is_exclusive_supplier = true THEN 1 END)              AS exclusive_contracts,
+         round(avg(s.reliability_score), 3)                                       AS avg_reliability,
+         round(avg(s.payment_terms_agreed), 0)                                    AS avg_payment_terms_days
+    RETURN supplier, region, total_contracts, contract_types,
+           exclusive_contracts,
+           round(toFloat(exclusive_contracts) / total_contracts * 100, 1)        AS exclusive_pct,
+           avg_reliability,
+           avg_payment_terms_days
+    ORDER BY total_contracts DESC
+    LIMIT 30
+"""
+
 # ─── Composite supplier risk score: single-pass join of all three risk dims ───
 # Joins reliability (SUPPLIES edge), discrepancy rate (INVOICE docs), and
 # avg lead-time delay (Document → Product) in one traversal.
@@ -22,7 +42,8 @@ _Q_SUPPLIER_RISK_SCORE = """
     OPTIONAL MATCH (sup)-[:ISSUES]->(doc:Document)-[:CONTAINS]->(p:Product)
     WHERE doc.lead_time_days IS NOT NULL AND p.lead_time_baseline_days IS NOT NULL
     WITH sup, avg_reliability, supply_degree, total_invoices, flagged_invoices,
-         avg(toFloat(doc.lead_time_days) - toFloat(p.lead_time_baseline_days)) AS avg_delay_days
+         count(doc)                                                               AS total_with_baseline,
+         count(CASE WHEN toFloat(doc.lead_time_days) > toFloat(p.lead_time_baseline_days) THEN 1 END) AS late_docs
     WHERE total_invoices >= $min_invoices
     RETURN sup.company_id AS company_id,
            sup.legal_name  AS supplier,
@@ -30,7 +51,11 @@ _Q_SUPPLIER_RISK_SCORE = """
            supply_degree,
            total_invoices,
            round(toFloat(flagged_invoices) / total_invoices * 100, 2) AS discrepancy_pct,
-           round(coalesce(avg_delay_days, 0.0), 2)                    AS avg_delay_days
+           round(
+               CASE WHEN total_with_baseline > 0
+                    THEN toFloat(late_docs) / total_with_baseline * 100
+                    ELSE 0 END, 2
+           )                                                           AS late_pct
     ORDER BY supplier
 """
 
@@ -59,16 +84,23 @@ _Q_BUYER_FRAGILITY = """
 
 
 class ScoringMixin:
+    def get_contract_detail(self) -> pd.DataFrame:
+        """
+        Desglose de contratos SUPPLIES por proveedor: tipos de contrato que mantiene,
+        cuántos son exclusivos, fiabilidad media y plazo de pago acordado medio.
+        Complementa el perfil agregado de get_contract_profile() con detalle individual.
+        """
+        return pd.DataFrame(self._fetch_data(_Q_CONTRACT_DETAIL))
+
     """Scoring compuesto de riesgo proveedor, fragilidad de comprador y perfil contractual."""
 
     def compute_supplier_risk_score(self, min_invoices: int = 3) -> pd.DataFrame:
         """
         Índice de riesgo compuesto por proveedor (0–100, mayor = más riesgo).
 
-        Combina tres dimensiones en una sola pasada Cypher:
-          - Fiabilidad de la relación SUPPLIES          (peso 40 %)
-          - Tasa de facturas con discrepancia           (peso 35 %)
-          - Retraso medio de entrega vs. baseline       (peso 25 %, techo 30 d)
+        Combina dos dimensiones medidas sobre documentos reales:
+          - Tasa de facturas con discrepancia           (peso 55 %)
+          - % de entregas tardías vs. baseline          (peso 45 %)
 
         El scoring final usa NumPy vectorizado sobre el DataFrame resultante.
         Solo se incluyen proveedores con al menos min_invoices facturas emitidas.
@@ -78,15 +110,14 @@ class ScoringMixin:
             return pd.DataFrame()
 
         df = pd.DataFrame(records)
-        rel   = df["avg_reliability"].to_numpy(dtype=float)
-        disc  = df["discrepancy_pct"].to_numpy(dtype=float) / 100
-        delay = np.clip(df["avg_delay_days"].to_numpy(dtype=float), 0, 30) / 30
+        disc = df["discrepancy_pct"].to_numpy(dtype=float) / 100
+        late = df["late_pct"].to_numpy(dtype=float) / 100
 
-        df["risk_score"] = ((1 - rel) * 40 + disc * 35 + delay * 25).round(2)
+        df["risk_score"] = (disc * 55 + late * 45).round(2)
 
         return (
             df[["supplier", "avg_reliability", "discrepancy_pct",
-                "avg_delay_days", "supply_degree", "risk_score"]]
+                "late_pct", "supply_degree", "risk_score"]]
             .sort_values("risk_score", ascending=False)
             .head(25)
             .reset_index(drop=True)

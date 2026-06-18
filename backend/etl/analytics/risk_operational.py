@@ -7,16 +7,20 @@ import pandas as pd
 _Q_OVERDUE_EXPOSURE = """
     MATCH (sup:Company)-[:ISSUES]->(doc:Document {doc_type: 'INVOICE', status: 'OVERDUE'})
     MATCH (doc)-[:SENT_TO]->(buyer:Company)
-    WITH sup.legal_name                      AS supplier,
-         buyer.legal_name                    AS buyer,
-         count(doc)                          AS overdue_invoices,
-         sum(toFloat(doc.gross_amount))      AS total_overdue_eur,
+    WITH sup, buyer,
+         count(doc)                           AS overdue_invoices,
+         sum(toFloat(doc.gross_amount))       AS total_overdue_eur,
          avg(toFloat(doc.payment_terms_days)) AS avg_payment_days
+    OPTIONAL MATCH (sup)-[s:SUPPLIES]->(buyer)
+    WITH sup.legal_name AS supplier, buyer.legal_name AS buyer,
+         overdue_invoices, total_overdue_eur, avg_payment_days,
+         avg(toFloat(s.payment_terms_agreed)) AS avg_agreed_days
     ORDER BY total_overdue_eur DESC
     LIMIT 20
     RETURN supplier, buyer, overdue_invoices,
-           round(total_overdue_eur, 2) AS total_overdue_eur,
-           round(avg_payment_days, 1)  AS avg_payment_days
+           round(total_overdue_eur, 2)                              AS total_overdue_eur,
+           round(avg_payment_days, 1)                               AS avg_payment_days,
+           round(coalesce(avg_agreed_days, avg_payment_days), 1)    AS avg_agreed_days
 """
 
 
@@ -50,20 +54,25 @@ class OperationalMixin:
 
     def get_payment_terms_exposure(self) -> pd.DataFrame:
         """
-        Exposición financiera total (suma de importes de facturas) por proveedor — top-15.
+        Exposición financiera total (suma de importes de facturas) por proveedor — top-25.
         Indica qué proveedores concentran mayor volumen de deuda pendiente de pago.
         """
         query = """
             MATCH (sup:Company)-[:ISSUES]->(doc:Document {doc_type: 'INVOICE'})
             WHERE doc.payment_terms_days IS NOT NULL AND doc.gross_amount IS NOT NULL
-            WITH sup.legal_name AS supplier,
+            WITH sup,
                  sum(toFloat(doc.gross_amount))        AS total_exposure,
                  avg(toFloat(doc.payment_terms_days))  AS avg_payment_days,
                  count(doc)                            AS invoice_count
-            ORDER BY total_exposure DESC LIMIT 15
+            OPTIONAL MATCH (sup)-[s:SUPPLIES]->()
+            WITH sup.legal_name AS supplier,
+                 total_exposure, avg_payment_days, invoice_count,
+                 avg(toFloat(s.payment_terms_agreed))  AS avg_agreed_days
+            ORDER BY total_exposure DESC LIMIT 25
             RETURN supplier,
-                   round(total_exposure, 2)     AS total_exposure_eur,
-                   round(avg_payment_days, 1)   AS avg_payment_days,
+                   round(total_exposure, 2)                             AS total_exposure_eur,
+                   round(avg_payment_days, 1)                           AS avg_payment_days,
+                   round(coalesce(avg_agreed_days, avg_payment_days), 1) AS avg_agreed_days,
                    invoice_count
         """
         with self._driver.session(database=self.neo4j_database) as s:
