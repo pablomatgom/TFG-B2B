@@ -50,8 +50,10 @@ def get_supplies_parser() -> argparse.ArgumentParser:
 # =============================================================================
 def synthesize_rel_supplies_csv(output_file: Path, companies_csv: Path, avg_out_degree: int, mu: float, seed: int) -> Path:
     """Orquesta la generación de relaciones comerciales respetando la topología LFR y las escribe en un CSV."""
-    if avg_out_degree <= 0: raise ValueError("avg_out_degree debe ser > 0")
-    if not (0.0 <= mu <= 1.0): raise ValueError("El parámetro de mezcla 'mu' debe estar entre 0.0 y 1.0")
+    if avg_out_degree <= 0:
+        raise ValueError("avg_out_degree debe ser > 0")
+    if not (0.0 <= mu <= 1.0):
+        raise ValueError("El parámetro de mezcla 'mu' debe estar entre 0.0 y 1.0")
 
     rng = random.Random(seed)
     companies = load_companies(companies_csv)

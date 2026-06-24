@@ -3,7 +3,7 @@ from __future__ import annotations
 import csv
 import random
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
 import typing
 from backend.etl.generation.csv_templates import CSV_SCHEMAS

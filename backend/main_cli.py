@@ -146,7 +146,7 @@ def build_parser() -> argparse.ArgumentParser:
     
     
     # --- SUBCOMANDO PARA ANALYZE ---
-    parser_analyze = subparsers.add_parser(
+    subparsers.add_parser(
         "analyze", 
         help="Análisis de topología",
         formatter_class=CleanHelpFormatter

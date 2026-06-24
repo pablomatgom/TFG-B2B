@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import csv
 import time
 import logging
@@ -263,7 +262,8 @@ class Neo4jBulkLoader:
 
         with self._driver.session(database=self.neo4j_database) as session:
             for batch in self._iter_csv_batches(file_path):
-                if not batch: continue
+                if not batch:
+                    continue
                 session.execute_write(self._write_batch, query, batch)
                 rows += len(batch)
                 batches += 1
@@ -278,14 +278,20 @@ class Neo4jBulkLoader:
     @staticmethod
     def _clean_key(key: str) -> str:
         """Limpia los sufijos de Neo4j admin (ej. 'company_id:ID(Company)' -> 'company_id')"""
-        if not key: return ""
-        
+        if not key:
+            return ""
+
         # Mapeos explícitos para las aristas según los templates
-        if key == ":START_ID(Company)": return "supplier_company_id"
-        if key == ":END_ID(Company)": return "buyer_company_id"
-        if key == ":START_ID(Document)": return "document_id"
-        if key == ":END_ID(Product)": return "product_id"
-        if key == ":TYPE": return "type"
+        if key == ":START_ID(Company)":
+            return "supplier_company_id"
+        if key == ":END_ID(Company)":
+            return "buyer_company_id"
+        if key == ":START_ID(Document)":
+            return "document_id"
+        if key == ":END_ID(Product)":
+            return "product_id"
+        if key == ":TYPE":
+            return "type"
         
         # Quitar todo lo que va después de los dos puntos (ej. legal_name:string -> legal_name)
         return key.split(":")[0]

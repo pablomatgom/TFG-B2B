@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 
 import bcrypt
 from neo4j import GraphDatabase
 from sqlalchemy.orm import Session
 
-from backend.core.config import Settings, load_settings
+from backend.core.config import Settings
 from backend.auth.db.database import Base, User, engine
 
 logger = logging.getLogger(__name__)

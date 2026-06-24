@@ -64,7 +64,8 @@ def get_documents_parser() -> argparse.ArgumentParser:
 def synthesize_documents_csv(output_file: Path, companies_csv: Path, rel_supplies_csv: Path,
                              seed: int, avg_out_degree: int) -> Path:
     """Genera documents.csv abarcando todo el historial usando un generador."""
-    if avg_out_degree <= 0: raise ValueError("avg_out_degree debe ser > 0")
+    if avg_out_degree <= 0:
+        raise ValueError("avg_out_degree debe ser > 0")
 
     rng = random.Random(seed)
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -313,11 +314,14 @@ def _apply_frequency_scale(base_orders: int, avg_out_degree: int) -> int:
 
 def _distribute_dates_with_seasonality(start_date: date, end_date: date, num_dates: int, rng: random.Random) -> list[date]:
     """Distribuye fechas forzando la primera en el start_date, y el resto con sesgo estacional."""
-    if num_dates <= 0: return []
-    if num_dates == 1: return [start_date]
+    if num_dates <= 0:
+        return []
+    if num_dates == 1:
+        return [start_date]
 
     window_days = (end_date - start_date).days
-    if window_days <= 0: return [start_date] * num_dates
+    if window_days <= 0:
+        return [start_date] * num_dates
 
     # El primer documento siempre desencadena la relación en start_date
     picked: list[date] = [start_date]

@@ -11,8 +11,8 @@ def run_load(settings: Settings, batch_size_loader: int, clear_db: bool = False)
     """
     Fase 2: Carga en la Base de Datos (Neo4j) de los CSVs generados en la fase anterior.
     """
-    logging.info(f"")
-    logging.info(f"[FASE 2] Ingesta Masiva en Neo4j iniciada.")
+    logging.info("")
+    logging.info("[FASE 2] Ingesta Masiva en Neo4j iniciada.")
     logging.info(f"         Target DB: '{settings.neo4j_database}' | Purga previa: {'Activada' if clear_db else 'Desactivada'}")
     logging.info(f"         Batch Size: {batch_size_loader} registros/lote")
     
