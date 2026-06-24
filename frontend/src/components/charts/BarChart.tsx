@@ -12,7 +12,7 @@ import {
 } from "recharts";
 
 export interface BarChartProps {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   data:             Record<string, any>[];
   index:            string;
   category:         string;

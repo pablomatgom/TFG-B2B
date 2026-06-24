@@ -256,7 +256,7 @@ export interface TreemapItem {
   fill?:      string;
   subtitle?:  string;
   companies?: CompanyInfo[];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   [key: string]: any;
 }
 
@@ -273,7 +273,7 @@ const DEFAULT_COLORS = [
   "#f97316","#10b981","#f59e0b","#ef4444","#06b6d4",
 ];
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function Cell({ x, y, width, height, name, size, total, fill, depth, companies, onCellClick }: any) {
   if (depth === 0) return null;
 

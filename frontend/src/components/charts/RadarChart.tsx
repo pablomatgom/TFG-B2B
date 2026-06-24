@@ -45,7 +45,7 @@ function TooltipBridge({
         ? { label, items: payload.map((p) => ({ name: p.name, value: p.value, color: p.color })) }
         : null
     );
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [active, label, payload?.length]);
   return null;
 }

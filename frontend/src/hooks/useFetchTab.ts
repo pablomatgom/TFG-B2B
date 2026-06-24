@@ -167,6 +167,6 @@ export function useFetchTab(
       .then((action) => dispatch(action))
       .catch((err)   => console.error(`Tab ${activeTab} fetch failed:`, err))
       .finally(()    => setLoadingTab(null));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, [activeTab]);
 }

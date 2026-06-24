@@ -41,7 +41,7 @@ interface BubbleChartProps {
   tooltipExtra?:   (point: BubblePoint) => React.ReactNode;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function CustomTooltip({ active, payload, tooltipExtra }: any) {
   if (!active || !payload?.length) return null;
   const pt: BubblePoint = payload[0]?.payload;
