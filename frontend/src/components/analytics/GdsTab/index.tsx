@@ -43,6 +43,7 @@ export function GdsTab({ gds }: Props) {
 
   // Community summary stats
   const communityTotalNodes = gds.communities.reduce((s, c) => s + c.total_empresas, 0);
+  const communitySingletons = gds.communities.filter((c) => c.total_empresas === 1).length;
   const communityAvgSize    = communityTotalNodes > 0
     ? (communityTotalNodes / gds.communities.length).toFixed(1)
     : "—";
@@ -78,19 +79,19 @@ export function GdsTab({ gds }: Props) {
             <div className="grid grid-cols-3 gap-4">
               <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 text-center">
                 <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide mb-1">Tasa de Cohesión</p>
-                <p className={`text-4xl font-black tabular-nums ${cohesionColor(gds.wcc.main_component_pct)}`}>
+                <p className={`text-2xl font-black tabular-nums ${cohesionColor(gds.wcc.main_component_pct)}`}>
                   {gds.wcc.main_component_pct.toFixed(1)}%
                 </p>
                 <p className="text-gray-400 text-xs mt-1">empresas en el componente principal</p>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 text-center">
                 <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide mb-1">Componentes Totales</p>
-                <p className="text-4xl font-black text-gray-900 tabular-nums">{gds.wcc.total_components}</p>
+                <p className="text-2xl font-black text-gray-900 tabular-nums">{gds.wcc.total_components}</p>
                 <p className="text-gray-400 text-xs mt-1">subgrafos desconectados</p>
               </div>
               <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 text-center">
                 <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide mb-1">Nodos Aislados</p>
-                <p className="text-4xl font-black text-gray-900 tabular-nums">{gds.wcc.isolated_nodes}</p>
+                <p className="text-2xl font-black text-gray-900 tabular-nums">{gds.wcc.isolated_nodes}</p>
                 <p className="text-gray-400 text-xs mt-1">empresas sin ningún enlace</p>
               </div>
             </div>
@@ -103,6 +104,7 @@ export function GdsTab({ gds }: Props) {
                 <div className="space-y-3">
                   {[...gds.wcc.components]
                     .sort((a, b) => b.size - a.size)
+                    .slice(0, 10)
                     .map((c, i) => (
                     <div key={c.component_id} className="flex items-center gap-3">
                       <span className={`text-xs font-semibold w-22 shrink-0 ${i === 0 ? "text-indigo-600" : "text-gray-400"}`}>
@@ -117,6 +119,11 @@ export function GdsTab({ gds }: Props) {
                       <span className="text-gray-500 text-xs tabular-nums w-8 text-right shrink-0">{c.size}</span>
                     </div>
                   ))}
+                  {gds.wcc.components.length > 10 && (
+                    <p className="text-gray-400 text-xs text-center pt-1">
+                      · {gds.wcc.components.length - 10} componentes menores no mostrados
+                    </p>
+                  )}
                 </div>
               </div>
             )}
@@ -134,30 +141,52 @@ export function GdsTab({ gds }: Props) {
           />
 
           <div className="grid grid-cols-3 gap-px bg-gray-100 border border-gray-100 rounded-xl overflow-hidden mb-4">
+            <div className="bg-white px-4 py-4 text-center">
+              <p className="text-lg font-black tabular-nums text-gray-900">{gds.communities.length}</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mt-1">Comunidades detectadas</p>
+              {communitySingletons > 0 && (
+                <p className="text-gray-400 text-[10px] mt-0.5 tabular-nums">
+                  {communitySingletons} de 1 empresa
+                </p>
+              )}
+            </div>
             {[
-              { label: "Comunidades detectadas", value: gds.communities.length.toString() },
-              { label: "Tamaño medio",            value: communityAvgSize },
-              { label: "Mayor clúster",            value: `${largestCommunityPct}% de la red` },
+              { label: "Tamaño medio",  value: communityAvgSize },
+              { label: "Mayor clúster", value: `${largestCommunityPct}% de la red` },
             ].map((kpi) => (
-              <div key={kpi.label} className="bg-white px-4 py-4 text-center">
-                <p className="text-gray-900 font-mono font-bold tabular-nums text-lg">{kpi.value}</p>
-                <p className="text-gray-400 text-xs mt-1">{kpi.label}</p>
+              <div key={kpi.label} className="bg-white px-4 py-4 text-center flex flex-col items-center justify-center">
+                <p className="text-lg font-black tabular-nums text-gray-900">{kpi.value}</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mt-1">{kpi.label}</p>
               </div>
             ))}
           </div>
 
           <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5">
-            <TreemapChart
-              data={[...gds.communities]
-                .sort((a, b) => b.total_empresas - a.total_empresas)
-                .map((c, i) => ({
-                  name:      `Ecosistema ${String.fromCharCode(65 + i)}`,
-                  size:      c.total_empresas,
-                  subtitle:  `${c.total_empresas} empresas`,
-                  companies: c.ejemplos_empresas ?? [],
-                }))}
-              height={Math.max(260, Math.min(gds.communities.length * 30, 480))}
-            />
+            {(() => {
+              const filtered = [...gds.communities]
+                .filter((c) => c.total_empresas > 1)
+                .sort((a, b) => b.total_empresas - a.total_empresas);
+              const visible  = filtered.slice(0, 10);
+              const hidden   = gds.communities.length - visible.length;
+              return (
+                <>
+                  <TreemapChart
+                    data={visible.map((c, i) => ({
+                      name:      `Ecosistema ${String.fromCharCode(65 + i)}`,
+                      size:      c.total_empresas,
+                      subtitle:  `${c.total_empresas} empresas`,
+                      companies: c.ejemplos_empresas ?? [],
+                    }))}
+                    height={Math.max(260, Math.min(visible.length * 30, 480))}
+                  />
+                  {hidden > 0 && (
+                    <p className="text-gray-400 text-xs mt-3 text-center">
+                      · {hidden} comunidad{hidden !== 1 ? "es" : ""} menor{hidden !== 1 ? "es" : ""} no mostrada{hidden !== 1 ? "s" : ""}
+                    </p>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </section>
       )}

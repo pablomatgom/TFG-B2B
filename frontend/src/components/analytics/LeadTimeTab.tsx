@@ -68,7 +68,7 @@ export function LeadTimeTab({ leadTime }: Props) {
           subtitle="Proporción de pedidos que no cumplieron el plazo de entrega acordado, desglosada por categoría de producto. Una tasa elevada en una categoría indica riesgo operativo activo y puede requerir revisión contractual con el proveedor."
         />
 
-        <KpiStrip valueSize="2xl" items={[
+        <KpiStrip items={[
           { label: "Pedidos analizados",    value: overallTotal.toLocaleString("es-ES") },
           { label: "Pedidos con retraso",   value: overallLate.toLocaleString("es-ES")  },
           { label: "Incumplimiento global", value: `${overallLatePct.toFixed(1)}%`      },

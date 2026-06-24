@@ -61,7 +61,7 @@ export function DiscrepanciesTab({ discrepancy, commercial }: Props) {
 
   if (!hasDiscrepancy && !hasCommercial) return EMPTY;
 
-  const discSliced = discrepancy.slice(0, 20);
+  const discChartData = discrepancy.slice(0, 20);
 
   // ── Discrepancy KPIs ─────────────────────────────────────────
   const avgRate    = discrepancy.length > 0
@@ -87,13 +87,13 @@ export function DiscrepanciesTab({ discrepancy, commercial }: Props) {
           <SectionLabel
             index={sectionIdx["disc"]}
             title="Tasa de Discrepancia por Proveedor"
-            subtitle="¿Qué proveedores generan más documentos erróneos sobre el total emitido? Solo se incluyen proveedores con mínimo 5 facturas para evitar sesgos estadísticos. Top-20 ordenados por tasa descendente."
+            subtitle="¿Qué proveedores generan más documentos erróneos sobre el total emitido? Solo se incluyen proveedores con mínimo 5 facturas para evitar sesgos estadísticos. Ordenados por tasa descendente."
           />
 
           <KpiStrip variant="strip" valueSize="lg" items={[
             { label: "Proveedores con historial", value: discrepancy.length.toString()                                                              },
             { label: "Tasa de discrepancia media", value: `${avgRate}%`                                                                             },
-            { label: "Mayor tasa registrada",      value: worstRow ? `${worstRow.discrepancy_rate_pct}% · ${worstRow.supplier}` : "—"               },
+            { label: "Mayor tasa registrada",      value: worstRow ? `${worstRow.discrepancy_rate_pct}%` : "—", sub: worstRow?.supplier },
           ]} />
 
           <div className="space-y-4">
@@ -103,23 +103,23 @@ export function DiscrepanciesTab({ discrepancy, commercial }: Props) {
               </div>
               <div className="p-5">
                 <BarChart
-                  data={discSliced}
+                  data={discChartData}
                   index="supplier"
                   category="discrepancy_rate_pct"
                   layout="vertical"
                   yAxisWidth={160}
                   rowHeight={22}
                   valueFormatter={(n) => `${n}%`}
-                  colorFn={(v) => v >= 20 ? "#ef4444" : v >= 10 ? "#f59e0b" : "#6366f1"}
+                  colorFn={(v) => v >= 10 ? "#ef4444" : v >= 7.5 ? "#f59e0b" : "#6366f1"}
                 />
               </div>
             </div>
 
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-              <DiscrepancyTable rows={discSliced.slice(0, PAGE)} />
-              {discSliced.length > PAGE && (
+              <DiscrepancyTable rows={discrepancy.slice(0, PAGE)} />
+              {discrepancy.length > PAGE && (
                 <div className="px-5 py-3 border-t border-gray-100 bg-gray-50">
-                  <ShowMoreButton total={discSliced.length} onClick={() => setShowDiscrepancyAll(true)} />
+                  <ShowMoreButton total={discrepancy.length} onClick={() => setShowDiscrepancyAll(true)} />
                 </div>
               )}
             </div>
@@ -264,11 +264,11 @@ export function DiscrepanciesTab({ discrepancy, commercial }: Props) {
 
       {/* ── MODALS ───────────────────────────────────────────────── */}
       <SectionModal
-        title="Tasa de Discrepancia — top-20 proveedores"
+        title={`Tasa de Discrepancia — ${discrepancy.length} proveedores`}
         open={showDiscrepancyAll}
         onClose={() => setShowDiscrepancyAll(false)}
       >
-        <DiscrepancyTable rows={discSliced} />
+        <DiscrepancyTable rows={discrepancy} />
       </SectionModal>
 
       <SectionModal

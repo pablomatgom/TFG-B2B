@@ -34,14 +34,13 @@ const MAIN_ITEMS: NavItem[] = [
 ];
 
 const ANALYTICS_ITEMS: NavItem[] = [
-  { name: "Riesgo",        href: "/analytics?tab=0", icon: ShieldExclamationIcon, tab: 0 },
-  { name: "Discrepancias", href: "/analytics?tab=1", icon: ExclamationTriangleIcon, tab: 1 },
-  { name: "Lead Time",     href: "/analytics?tab=2", icon: ClockIcon,              tab: 2 },
-  { name: "Exposición",    href: "/analytics?tab=3", icon: CurrencyEuroIcon,       tab: 3 },
-  { name: "Contratos",     href: "/analytics?tab=6", icon: DocumentTextIcon,       tab: 6 },
-  { name: "Trazabilidad",  href: "/analytics?tab=4", icon: LinkIcon,               tab: 4 },
-  { name: "GDS",           href: "/analytics?tab=5", icon: CpuChipIcon,            tab: 5 },
-  { name: "Síntesis",      href: "/analytics?tab=7", icon: SparklesIcon,           tab: 7 },
+  { name: "Contratos",     href: "/analytics?tab=0", icon: DocumentTextIcon,       tab: 0 },
+  { name: "Riesgo",        href: "/analytics?tab=1", icon: ShieldExclamationIcon,  tab: 1 },
+  { name: "Discrepancias", href: "/analytics?tab=2", icon: ExclamationTriangleIcon, tab: 2 },
+  { name: "Lead Time",     href: "/analytics?tab=3", icon: ClockIcon,              tab: 3 },
+  { name: "Exposición",    href: "/analytics?tab=4", icon: CurrencyEuroIcon,       tab: 4 },
+  { name: "Trazabilidad",  href: "/analytics?tab=5", icon: LinkIcon,               tab: 5 },
+  { name: "GDS",           href: "/analytics?tab=6", icon: CpuChipIcon,            tab: 6 },
 ];
 
 const SYSTEM_ITEMS: NavItem[] = [

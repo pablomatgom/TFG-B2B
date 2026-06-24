@@ -451,7 +451,15 @@ python backend/main_cli.py generate -h`}</Code>
             <div className="space-y-3">
               {[
                 {
-                  tab: "Riesgo", href: "/analytics?tab=0",
+                  tab: "Contratos", href: "/analytics?tab=0",
+                  badge: "bg-purple-50 text-purple-700 border-purple-200",
+                  sections: [
+                    { title: "Perfil de Contratos de Red", desc: "Distribución FRAME / ANNUAL / SPOT de acuerdos activos, % de exclusividad, fiabilidad media de la red y antigüedad media de los contratos." },
+                    { title: "Desglose por Proveedor", desc: "Tipos de contrato, tasa de exclusividad y plazo de pago medio por proveedor — permite identificar dependencias contractuales de alto riesgo." },
+                  ],
+                },
+                {
+                  tab: "Riesgo", href: "/analytics?tab=1",
                   badge: "bg-red-50 text-red-700 border-red-200",
                   sections: [
                     { title: "Concentración de Proveedores", desc: "% de aristas SUPPLIES controladas por los top-N proveedores. Un valor superior al 50% indica riesgo sistémico por dependencia extrema en la red." },
@@ -460,7 +468,7 @@ python backend/main_cli.py generate -h`}</Code>
                   ],
                 },
                 {
-                  tab: "Discrepancias", href: "/analytics?tab=1",
+                  tab: "Discrepancias", href: "/analytics?tab=2",
                   badge: "bg-orange-50 text-orange-700 border-orange-200",
                   sections: [
                     { title: "Tasa de Error por Proveedor", desc: "Ratio facturas con discrepancy_flag=true sobre el total emitido (mínimo 5 facturas). Identifica proveedores con baja calidad documental EDI." },
@@ -468,14 +476,14 @@ python backend/main_cli.py generate -h`}</Code>
                   ],
                 },
                 {
-                  tab: "Lead Time", href: "/analytics?tab=2",
+                  tab: "Lead Time", href: "/analytics?tab=3",
                   badge: "bg-amber-50 text-amber-700 border-amber-200",
                   sections: [
                     { title: "Cumplimiento por Categoría", desc: "Demora media real vs. baseline del producto por categoría HS. El % tardío indica cuántos envíos superaron el lead_time_baseline_days acordado." },
                   ],
                 },
                 {
-                  tab: "Exposición", href: "/analytics?tab=3",
+                  tab: "Exposición", href: "/analytics?tab=4",
                   badge: "bg-yellow-50 text-yellow-700 border-yellow-200",
                   sections: [
                     { title: "Cartera de Crédito Activo", desc: "Top-15 proveedores por exposición total en euros (facturas en estado PENDING o PARTIAL) — riesgo de crédito acumulado en la red." },
@@ -483,7 +491,7 @@ python backend/main_cli.py generate -h`}</Code>
                   ],
                 },
                 {
-                  tab: "Trazabilidad", href: "/analytics?tab=4",
+                  tab: "Trazabilidad", href: "/analytics?tab=5",
                   badge: "bg-indigo-50 text-indigo-700 border-indigo-200",
                   sections: [
                     { title: "Cadena Documental Backward", desc: "Ruta INVOICE →[FULFILLS]→ ORDER hacia atrás, mostrando todos los documentos intermedios y saltos topológicos desde la factura al pedido original." },
@@ -491,21 +499,13 @@ python backend/main_cli.py generate -h`}</Code>
                   ],
                 },
                 {
-                  tab: "GDS", href: "/analytics?tab=5",
+                  tab: "GDS", href: "/analytics?tab=6",
                   badge: "bg-blue-50 text-blue-700 border-blue-200",
                   sections: [
                     { title: "Betweenness Centrality", desc: "Nodos por los que pasa más tráfico de caminos mínimos en la red — los «cuellos de botella» reales cuya caída desconectaría comunidades enteras." },
                     { title: "PageRank", desc: "Influencia relativa de cada empresa basada en la importancia de sus vecinos de suministro — un proveedor de un hub pesa más que uno de un nodo periférico." },
                     { title: "Louvain Community Detection", desc: "Clústeres de empresas con alta densidad de relaciones internas — revela mercados o sectores de suministro naturales emergentes de la topología LFR." },
                     { title: "Componentes Conexos (WCC)", desc: "Subgrafos completamente aislados del grafo principal — empresas o grupos sin ningún camino hacia la red mayoritaria." },
-                  ],
-                },
-                {
-                  tab: "Contratos", href: "/analytics?tab=6",
-                  badge: "bg-purple-50 text-purple-700 border-purple-200",
-                  sections: [
-                    { title: "Perfil de Contratos de Red", desc: "Distribución FRAME / ANNUAL / SPOT de acuerdos activos, % de exclusividad, fiabilidad media de la red y antigüedad media de los contratos." },
-                    { title: "Desglose por Proveedor", desc: "Tipos de contrato, tasa de exclusividad y plazo de pago medio por proveedor — permite identificar dependencias contractuales de alto riesgo." },
                   ],
                 },
                 {

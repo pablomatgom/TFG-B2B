@@ -7,52 +7,62 @@ from typing import Any
 from neo4j import Driver, GraphDatabase
 from neo4j.exceptions import Neo4jError
 
-from backend.etl.analytics.macro   import MacroMixin,   GraphMacroStats
-from backend.etl.analytics.lineage import LineageMixin
-from backend.etl.analytics.gds     import GDSMixin
-from backend.etl.analytics.risk    import RiskMixin
+from backend.etl.analytics.macro_stats   import MacroMixin
+from backend.etl.analytics.traceability  import LineageMixin
+from backend.etl.analytics.gds           import GDSMixin
+from backend.etl.analytics.risk          import RiskMixin
 
 logger = logging.getLogger(__name__)
 
+        
+def _report_query_error(kind: str, code: str | None,
+                        message: str, query: str, params: dict) -> None:
+    """Formatea y registra los detalles completos de un fallo de consulta Neo4j.
 
-def _report_query_error(
-    kind: str,
-    code: str | None,
-    message: str,
-    query: str,
-    params: dict,
-) -> None:
-    sep = "─" * 60
-    lines = [
-        sep,
-        f"[ANALYZER ERROR] {kind}" + (f" — {code}" if code else ""),
-        f"  message : {message}",
-        f"  params  : {params}",
-        f"  query   :\n{textwrap.dedent(query).strip()}",
-        sep,
-    ]
-    for line in lines:
-        logger.error(line)
+    Centraliza el formato del mensaje de error para que todos los fallos de ``_fetch_data``
+    produzcan entradas de log homogéneas con contexto suficiente para reproducir el fallo.
+
+    Args:
+        kind: Tipo de error (``"Neo4j"`` para ``Neo4jError``, nombre de clase para el resto).
+        code: Código de error Neo4j (``Neo4jError.code``); ``None`` si no aplica.
+        message: Mensaje de error sin procesar.
+        query: Sentencia Cypher que provocó el fallo.
+        params: Parámetros pasados a la consulta.
+    """
+    code_suffix = f" [{code}]" if code else ""
+    clean_query = textwrap.dedent(query).strip()
+    
+    log_message = (
+        f"Query execution failed in analyzer ({kind}){code_suffix}\n"
+        f"  Detail: {message}\n"
+        f"  Params: {params}\n"
+        f"  Query :\n{textwrap.indent(clean_query, '    ')}"
+    )
+    
+    logger.error(log_message)
 
 
 class B2BGraphAnalyzer(MacroMixin, LineageMixin, GDSMixin, RiskMixin):
-    """
-    Motor analítico central.
+    """Motor analítico central que agrega cuatro mixins especializados sobre la red Neo4j B2B.
 
-    Los métodos están organizados en cuatro módulos especializados:
-      • macro.py    — estadísticas globales, geografía, series temporales
-      • lineage.py  — trazabilidad documental (discrepancias)
-      • gds.py      — Graph Data Science: centralidad, comunidades
-      • risk.py     — riesgo operacional: concentración, discrepancias, lead time, exposición
+    Gestiona el ciclo de vida de la conexión Neo4j (``__enter__``/``__exit__``) y expone
+    ``_fetch_data`` como helper compartido de lectura para todos los mixins.
+
+    Los métodos de análisis están organizados en cuatro módulos:
+
+    - ``macro_stats.py``    — estructura global, rankings, series temporales y topología scale-free
+    - ``traceability.py``   — trazabilidad documental (backward, exact path, forward)
+    - ``gds.py``            — Graph Data Science: centralidad, PageRank, comunidades, WCC
+    - ``risk.py``           — agrega cuatro submódulos de riesgo:
+
+        - ``risk_supply.py``      — lead time, pagos, vencidos, concentración, geografía
+        - ``risk_discrepancy.py`` — tasa de discrepancias e impacto comercial
+        - ``risk_scoring.py``     — scoring compuesto, fragilidad de comprador, contratos
+        - ``risk_cross.py``       — análisis cruzado multidimensional
     """
 
-    def __init__(
-        self,
-        neo4j_uri:      str,
-        neo4j_user:     str,
-        neo4j_password: str,
-        neo4j_database: str,
-    ) -> None:
+    def __init__(self, neo4j_uri: str, neo4j_user: str,
+                 neo4j_password: str, neo4j_database: str) -> None:
         self.neo4j_database = neo4j_database
         self._driver: Driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_password))
 
@@ -69,9 +79,18 @@ class B2BGraphAnalyzer(MacroMixin, LineageMixin, GDSMixin, RiskMixin):
         self._driver.verify_connectivity()
 
     def _fetch_data(self, query: str, **params: Any) -> list[dict[str, Any]]:
-        """
-        Shared read helper used by all mixins.
-        Logs full Neo4j error details (code, message, query) before re-raising.
+        """Ejecuta una consulta Cypher de solo lectura y devuelve los resultados como lista de dicts.
+
+        Abre una sesión Neo4j, ejecuta la consulta en una operación de lectura y devuelve
+        los resultados como lista de dicts. Ante cualquier fallo delega en
+        ``_report_query_error`` para registrar el contexto completo.
+
+        Args:
+            query: Sentencia Cypher de solo lectura.
+            **params: Parámetros de la consulta (interpolados por el driver).
+
+        Returns:
+            Lista de dicts con los resultados; una fila por registro del ``RETURN`` Cypher.
         """
         try:
             with self._driver.session(database=self.neo4j_database) as session:

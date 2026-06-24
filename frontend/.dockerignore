@@ -1,0 +1,20 @@
+# Excluir dependencias locales y cachés de compilación en el cliente
+node_modules/
+.next/
+out/
+build/
+
+# Excluir variables de entorno locales de desarrollo
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs de error de Node
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Configuraciones de editores
+.idea/
+.vscode/

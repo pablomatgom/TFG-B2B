@@ -10,7 +10,7 @@ import type {
   LineageRow, ExactPathRow, ForwardRow,
   GdsData,
   ContractProfileData, ContractDetailRow,
-  GeographicRiskRow, CrossSupplierRow, CrossBuyerRow,
+  GeographicRiskRow,
 } from "@/types/analytics";
 
 /* ── State shape ────────────────────────────────────────────── */
@@ -30,22 +30,19 @@ export type AnalyticsState = {
   gds:            GdsData;
   contracts:      ContractProfileData | null;
   contractDetail: ContractDetailRow[];
-  geographic:     GeographicRiskRow[];
-  crossSuppliers: CrossSupplierRow[];
-  crossBuyers:    CrossBuyerRow[];
+  geographic: GeographicRiskRow[];
 };
 
 /* ── Action union — one per tab ─────────────────────────────── */
 
 export type AnalyticsAction =
-  | { type: "SET_RISK";         data: Pick<AnalyticsState, "risk" | "scores" | "fragility"> }
+  | { type: "SET_RISK";         data: Pick<AnalyticsState, "risk" | "scores" | "fragility" | "geographic"> }
   | { type: "SET_DISCREPANCY";  data: Pick<AnalyticsState, "discrepancy" | "commercial"> }
   | { type: "SET_LEAD_TIME";    data: Pick<AnalyticsState, "leadTime"> }
   | { type: "SET_EXPOSURE";     data: Pick<AnalyticsState, "payment" | "overdueRows"> }
   | { type: "SET_TRACEABILITY"; data: Pick<AnalyticsState, "lineage" | "exactPaths" | "forward"> }
   | { type: "SET_GDS";          data: Pick<AnalyticsState, "gds"> }
-  | { type: "SET_CONTRACTS";    data: Pick<AnalyticsState, "contracts" | "contractDetail"> }
-  | { type: "SET_SYNTHESIS";    data: Pick<AnalyticsState, "geographic" | "crossSuppliers" | "crossBuyers"> };
+  | { type: "SET_CONTRACTS";    data: Pick<AnalyticsState, "contracts" | "contractDetail"> };
 
 /* ── Reducer + initial state ────────────────────────────────── */
 
@@ -64,9 +61,7 @@ export const INITIAL_ANALYTICS_STATE: AnalyticsState = {
   gds:            { bottlenecks: [], communities: [], pagerank: [], wcc: {} as GdsData["wcc"] },
   contracts:      null,
   contractDetail: [],
-  geographic:     [],
-  crossSuppliers: [],
-  crossBuyers:    [],
+  geographic: [],
 };
 
 export function analyticsReducer(
@@ -85,18 +80,30 @@ const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
 async function fetchTabData(tab: number): Promise<AnalyticsAction> {
   switch (tab) {
     case 0: {
-      const [riskD, scoresD, fragD] = await Promise.all([
+      const [contractsD, detailD] = await Promise.all([
+        j<ContractProfileData>(`${API_BASE}/api/analytics/risk/contracts`),
+        j<unknown>(`${API_BASE}/api/analytics/risk/contracts-detail`),
+      ]);
+      return { type: "SET_CONTRACTS", data: {
+        contracts:      (contractsD as ContractProfileData)?.contract_type_distribution ? contractsD as ContractProfileData : null,
+        contractDetail: arr<ContractDetailRow>(detailD),
+      }};
+    }
+    case 1: {
+      const [riskD, scoresD, fragD, geoD] = await Promise.all([
         j<RiskData>(`${API_BASE}/api/analytics/risk`),
         j<unknown>(`${API_BASE}/api/analytics/risk/supplier-score`),
         j<unknown>(`${API_BASE}/api/analytics/risk/buyer-fragility`),
+        j<unknown>(`${API_BASE}/api/analytics/risk/geographic`),
       ]);
       return { type: "SET_RISK", data: {
         risk:      (riskD as RiskData)?.total_supplies_edges ? riskD as RiskData : null,
         scores:    arr<SupplierScoreRow>(scoresD),
         fragility: arr<BuyerFragilityRow>(fragD),
+        geographic: arr<GeographicRiskRow>(geoD),
       }};
     }
-    case 1: {
+    case 2: {
       const [discD, comD] = await Promise.all([
         j<unknown>(`${API_BASE}/api/analytics/discrepancy-suppliers`),
         j<unknown>(`${API_BASE}/api/analytics/risk/commercial-impact`),
@@ -106,11 +113,11 @@ async function fetchTabData(tab: number): Promise<AnalyticsAction> {
         commercial:  arr<CommercialImpactRow>(comD),
       }};
     }
-    case 2: {
+    case 3: {
       const ltD = await j<unknown>(`${API_BASE}/api/analytics/lead-time`);
       return { type: "SET_LEAD_TIME", data: { leadTime: arr<LeadTimeRow>(ltD) } };
     }
-    case 3: {
+    case 4: {
       const [payD, overdueD] = await Promise.all([
         j<unknown>(`${API_BASE}/api/analytics/payment`),
         j<unknown>(`${API_BASE}/api/analytics/risk/overdue`),
@@ -120,7 +127,7 @@ async function fetchTabData(tab: number): Promise<AnalyticsAction> {
         overdueRows: arr<OverdueRow>(overdueD),
       }};
     }
-    case 4: {
+    case 5: {
       const [linD, pathD, fwdD] = await Promise.all([
         j<unknown>(`${API_BASE}/api/analytics/lineage/backward`),
         j<unknown>(`${API_BASE}/api/analytics/lineage/exact-paths`),
@@ -132,32 +139,10 @@ async function fetchTabData(tab: number): Promise<AnalyticsAction> {
         forward:    arr<ForwardRow>(fwdD),
       }};
     }
-    case 5: {
+    case 6: {
       const gdsD = await j<GdsData | null>(`${API_BASE}/api/analytics/gds`);
       return { type: "SET_GDS", data: {
         gds: gdsD ?? { bottlenecks: [], communities: [], pagerank: [], wcc: {} as GdsData["wcc"] },
-      }};
-    }
-    case 6: {
-      const [contractsD, detailD] = await Promise.all([
-        j<ContractProfileData>(`${API_BASE}/api/analytics/risk/contracts`),
-        j<unknown>(`${API_BASE}/api/analytics/risk/contracts-detail`),
-      ]);
-      return { type: "SET_CONTRACTS", data: {
-        contracts:      (contractsD as ContractProfileData)?.contract_type_distribution ? contractsD as ContractProfileData : null,
-        contractDetail: arr<ContractDetailRow>(detailD),
-      }};
-    }
-    case 7: {
-      const [geoD, suppD, buyD] = await Promise.all([
-        j<unknown>(`${API_BASE}/api/analytics/risk/geographic`),
-        j<unknown>(`${API_BASE}/api/analytics/risk/synthesis/suppliers`),
-        j<unknown>(`${API_BASE}/api/analytics/risk/synthesis/buyers`),
-      ]);
-      return { type: "SET_SYNTHESIS", data: {
-        geographic:     arr<GeographicRiskRow>(geoD),
-        crossSuppliers: arr<CrossSupplierRow>(suppD),
-        crossBuyers:    arr<CrossBuyerRow>(buyD),
       }};
     }
     default:

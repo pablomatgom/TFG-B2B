@@ -92,6 +92,8 @@ export interface SupplierScoreRow {
   late_pct: number;
   supply_degree: number;
   risk_score: number;
+  overdue_count: number;
+  overdue_eur: number;
 }
 
 export interface BuyerFragilityRow {
@@ -101,6 +103,8 @@ export interface BuyerFragilityRow {
   supplier_count: number;
   top_supplier_pct: number;
   total_volume_eur: number;
+  overdue_received: number;
+  overdue_eur: number;
 }
 
 export interface OverdueRow {
@@ -131,6 +135,39 @@ export interface ContractDetailRow {
   avg_payment_terms_days: number;
 }
 
+export interface SupplierInvoiceRow {
+  document_id: string;
+  buyer: string;
+  gross_amount: number;
+  status: string;
+  payment_terms_days: number;
+  due_date: string | null;
+  issue_date: string | null;
+  discrepancy_flag: boolean;
+}
+
+export interface BuyerSupplierRecommendationRow {
+  supplier: string;
+  region: string | null;
+  size_band: string | null;
+  industry_code: string | null;
+  supply_degree: number;
+  avg_reliability: number;
+  cat_overlap: number;
+  proximity_count: number;
+}
+
+export interface SupplierContractRow {
+  buyer: string;
+  buyer_region: string | null;
+  contract_type: string;
+  is_exclusive: boolean;
+  reliability_score: number;
+  payment_terms_days: number;
+  agreed_volume_eur: number;
+  since_date: string | null;
+}
+
 export interface GeographicRiskRow {
   region: string;
   supplier_count: number;
@@ -145,7 +182,9 @@ export interface CrossSupplierRow {
   supply_degree: number;
   total_invoices: number;
   discrepancy_pct: number;
+  late_pct: number;
   risk_score: number;
+  avg_reliability: number;
   overdue_count: number;
   overdue_eur: number;
 }
@@ -178,7 +217,7 @@ export interface GdsData {
   communities: {
     communityId: number;
     total_empresas: number;
-    ejemplos_empresas: string[];
+    ejemplos_empresas: { name: string; role: string; region: string; band: string; sector: string }[];
   }[];
   pagerank: {
     company_id: string;

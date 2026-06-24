@@ -105,12 +105,12 @@ def run_analyze(settings: Settings) -> Path:
         # ── Risk & operational ───────────────────────────────────────────────
         commercial_impact_path = _safe_df(
             "compute_commercial_impact",
-            lambda: analyzer.compute_commercial_impact(limit=100),
+            analyzer.compute_commercial_impact,
             export_dir, "commercial_impact.json",
         )
         risk_path = _safe_dict(
             "get_supplier_risk_concentration",
-            lambda: analyzer.get_supplier_risk_concentration(top_n=25),
+            analyzer.get_supplier_risk_concentration,
             export_dir, "risk_concentration.json",
         )
         discrepancy_sup_path = _safe_df(
@@ -130,7 +130,7 @@ def run_analyze(settings: Settings) -> Path:
         )
         supplier_score_path = _safe_df(
             "compute_supplier_risk_score",
-            lambda: analyzer.compute_supplier_risk_score(min_invoices=3),
+            analyzer.compute_supplier_risk_score,
             export_dir, "supplier_risk_score.json",
         )
         buyer_fragility_path = _safe_df(
@@ -160,15 +160,9 @@ def run_analyze(settings: Settings) -> Path:
         )
         cross_suppliers_path = _safe_df(
             "get_cross_dimensional_suppliers",
-            lambda: analyzer.get_cross_dimensional_suppliers(min_invoices=3),
+            analyzer.get_cross_dimensional_suppliers,
             export_dir, "cross_suppliers.json",
         )
-        cross_buyers_path = _safe_df(
-            "get_cross_dimensional_buyers",
-            analyzer.get_cross_dimensional_buyers,
-            export_dir, "cross_buyers.json",
-        )
-
     exported = [
         p.name for p in [
             macro_path, temporal_path,
@@ -176,7 +170,7 @@ def run_analyze(settings: Settings) -> Path:
             bottlenecks_path, communities_path, pagerank_path, wcc_path,
             commercial_impact_path, risk_path, discrepancy_sup_path, lead_time_path, payment_path,
             supplier_score_path, buyer_fragility_path, overdue_path, contract_profile_path,
-            contract_detail_path, geographic_risk_path, cross_suppliers_path, cross_buyers_path,
+            contract_detail_path, geographic_risk_path, cross_suppliers_path,
         ]
         if p is not None
     ]

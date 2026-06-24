@@ -56,8 +56,8 @@ export function reliabilityBadge(v: number): string {
 }
 
 export function discrepancyBadge(pct: number): string {
-  if (pct >= 20) return "bg-red-50 text-red-600";
-  if (pct >= 10) return "bg-amber-50 text-amber-600";
+  if (pct >= 10)  return "bg-red-50 text-red-600";
+  if (pct >= 7.5) return "bg-amber-50 text-amber-600";
   return "bg-emerald-50 text-emerald-600";
 }
 

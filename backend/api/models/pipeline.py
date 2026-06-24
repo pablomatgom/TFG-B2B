@@ -17,8 +17,3 @@ class PipelineRequest(BaseModel):
     use_random_seed: bool = True
     seed_value: Optional[int] = 42
 
-
-class LocationResponse(BaseModel):
-    name: str
-    coordinates: List[float]
-    weight: int

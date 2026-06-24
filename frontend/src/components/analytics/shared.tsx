@@ -92,6 +92,7 @@ export function EstadoPill({ estado }: { estado: string }) {
 export interface KpiItem {
   label:       string;
   value:       string;
+  sub?:        string;
   valueClass?: string;
 }
 
@@ -119,18 +120,21 @@ export function KpiStrip({
   items,
   cols      = 3,
   variant   = "cards",
-  valueSize = "xl",
+  valueSize = "lg",
   className = "",
 }: KpiStripProps) {
   if (variant === "strip") {
     return (
       <div className={`grid ${COL_CLASS[cols]} gap-px bg-gray-100 border border-gray-100 rounded-xl overflow-hidden mb-4 ${className}`}>
         {items.map((kpi) => (
-          <div key={kpi.label} className="bg-white px-4 py-4 text-center">
-            <p className={`font-mono font-bold tabular-nums truncate ${SIZE_CLASS[valueSize]} ${kpi.valueClass ?? "text-gray-900"}`}>
+          <div key={kpi.label} className="bg-white px-4 py-4 text-center flex flex-col justify-center">
+            <p className={`font-black tabular-nums truncate ${SIZE_CLASS[valueSize]} ${kpi.valueClass ?? "text-gray-900"}`}>
               {kpi.value}
             </p>
-            <p className="text-gray-400 text-xs mt-1">{kpi.label}</p>
+            {kpi.sub && (
+              <p className="text-gray-400 text-xs mt-0.5 truncate">{kpi.sub}</p>
+            )}
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mt-1">{kpi.label}</p>
           </div>
         ))}
       </div>
@@ -140,11 +144,14 @@ export function KpiStrip({
   return (
     <div className={`grid ${COL_CLASS[cols]} gap-4 mb-4 ${className}`}>
       {items.map((kpi) => (
-        <div key={kpi.label} className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 text-center">
+        <div key={kpi.label} className="bg-white border border-gray-200 rounded-xl shadow-sm p-4 text-center flex flex-col justify-center">
           <p className="text-gray-400 text-[10px] font-semibold uppercase tracking-wide mb-1">{kpi.label}</p>
           <p className={`font-black tabular-nums ${SIZE_CLASS[valueSize]} ${kpi.valueClass ?? "text-gray-900"}`}>
             {kpi.value}
           </p>
+          {kpi.sub && (
+            <p className="text-gray-400 text-xs mt-1 truncate">{kpi.sub}</p>
+          )}
         </div>
       ))}
     </div>

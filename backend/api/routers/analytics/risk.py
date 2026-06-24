@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Query
 
-from backend.api.dependencies import read_json
+from backend.api.dependencies import get_analyzer_instance, read_json
+from backend.etl.analytics.analyzer import B2BGraphAnalyzer
 
 router = APIRouter(prefix="/risk")
 
@@ -46,3 +47,36 @@ def get_cross_suppliers():
 @router.get("/synthesis/buyers")
 def get_cross_buyers():
     return read_json("cross_buyers.json", default=[])
+
+@router.get("/buyer-supplier-recommendations")
+def get_buyer_supplier_recommendations(
+    buyer: str = Query(..., description="Razón social exacta del comprador"),
+    analyzer: B2BGraphAnalyzer = Depends(get_analyzer_instance),
+):
+    df = analyzer.get_buyer_supplier_recommendations(buyer)
+    return df.to_dict(orient="records") if not df.empty else []
+
+@router.get("/supplier-contracts")
+def get_supplier_contracts(
+    supplier: str = Query(..., description="Razón social exacta del proveedor"),
+    analyzer: B2BGraphAnalyzer = Depends(get_analyzer_instance),
+):
+    df = analyzer.get_supplier_contracts(supplier)
+    return df.to_dict(orient="records") if not df.empty else []
+
+@router.get("/supplier-pair-overdue")
+def get_supplier_pair_overdue(
+    supplier: str = Query(..., description="Razón social exacta del proveedor"),
+    buyer: str = Query(..., description="Razón social exacta del comprador"),
+    analyzer: B2BGraphAnalyzer = Depends(get_analyzer_instance),
+):
+    df = analyzer.get_supplier_pair_overdue_invoices(supplier, buyer)
+    return df.to_dict(orient="records") if not df.empty else []
+
+@router.get("/supplier-invoices")
+def get_supplier_invoices(
+    supplier: str = Query(..., description="Razón social exacta del proveedor"),
+    analyzer: B2BGraphAnalyzer = Depends(get_analyzer_instance),
+):
+    df = analyzer.get_supplier_invoices(supplier)
+    return df.to_dict(orient="records") if not df.empty else []

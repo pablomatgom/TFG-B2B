@@ -200,14 +200,13 @@ class Neo4jBulkLoader:
         
     def clear_database(self) -> None:
         """Elimina todos los nodos y relaciones de la base de datos de forma segura por lotes."""
-        logging.info("Iniciando borrado completo de la base de datos (nodos y relaciones)...")
-        # Borrado en lotes transaccionales para grafos masivos
-        query = """
+        logging.info(f"Iniciando borrado completo de la base de datos en lotes de {self.batch_size} nodos...")
+        query = f"""
             MATCH (n)
-            CALL {
+            CALL {{
                 WITH n
                 DETACH DELETE n
-            } IN TRANSACTIONS OF 10000 ROWS
+            }} IN TRANSACTIONS OF {self.batch_size} ROWS
         """
         try:
             with self._driver.session(database=self.neo4j_database) as session:

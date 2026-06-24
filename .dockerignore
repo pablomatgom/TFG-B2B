@@ -1,0 +1,26 @@
+# Excluir carpetas pesadas del frontend en la compilación global
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+
+# Excluir bases de datos locales y sets de datos sintéticos masivos
+data/
+backend/data/
+**/neo4j_data/
+**/neo4j_logs/
+
+# Excluir entornos virtuales de Python y cachés de código
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+
+# Control de versiones e IDEs
+.git
+.gitignore
+.idea/
+.vscode/

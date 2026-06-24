@@ -1,22 +1,92 @@
 "use client";
 
 import { useState } from "react";
+import { EyeIcon } from "@heroicons/react/24/outline";
 import BarChart from "@/components/charts/BarChart";
-import type { PaymentRow, OverdueRow } from "@/types/analytics";
+import type { PaymentRow, OverdueRow, SupplierInvoiceRow } from "@/types/analytics";
 import { paymentDaysBadge, PAGE_SIZE, EUR } from "@/lib/analytics";
-import { EMPTY, ShowMoreButton, SectionModal, SectionLabel, KpiStrip, ProgressBar } from "./shared";
+import { EMPTY, ShowMoreButton, SectionModal, SectionLabel, KpiStrip, ProgressBar, InfoTooltip } from "./shared";
+import { API_BASE } from "@/lib/api";
 
-function OverdueTable({ rows }: { rows: OverdueRow[] }) {
+const STATUS_BADGE: Record<string, string> = {
+  PAID:    "bg-emerald-50 text-emerald-700 border-emerald-200",
+  PENDING: "bg-indigo-50  text-indigo-700  border-indigo-200",
+  PARTIAL: "bg-amber-50   text-amber-700   border-amber-200",
+  OVERDUE: "bg-red-50     text-red-700     border-red-200",
+};
+
+function SupplierInvoicesTable({ rows }: { rows: SupplierInvoiceRow[] }) {
+  if (rows.length === 0) return (
+    <p className="text-center text-gray-400 text-sm py-10">Sin facturas disponibles.</p>
+  );
   return (
     <table className="w-full text-sm">
       <thead>
         <tr className="bg-gray-50 border-b border-gray-100">
-          {["Proveedor", "Comprador", "Facturas", "Importe Vencido (€)", "Plazo Medio"].map((h, i) => (
-            <th
-              key={h}
-              className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400 ${i > 1 ? "text-right" : "text-left"}`}
-            >
+          {(["Documento", "Comprador", "Importe (€)", "Estado", "Plazo (d)", "Vencimiento", "Emisión", "Discrepancia"] as const).map((h, i) => (
+            <th key={h} className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400 ${i >= 2 ? "text-right" : "text-left"}`}>
               {h}
+            </th>
+          ))}
+        </tr>
+      </thead>
+      <tbody className="divide-y divide-gray-100">
+        {rows.map((row) => (
+          <tr key={row.document_id} className="hover:bg-gray-50 transition-colors">
+            <td className="px-4 py-3 font-mono text-xs text-gray-600">{row.document_id}</td>
+            <td className="px-4 py-3 text-gray-900 font-medium max-w-[160px] truncate">{row.buyer}</td>
+            <td className="px-4 py-3 text-right font-mono font-semibold text-gray-700 tabular-nums">
+              {EUR(row.gross_amount, 2)} €
+            </td>
+            <td className="px-4 py-3 text-right">
+              <span className={`inline-flex justify-center px-2 py-0.5 rounded border text-xs font-semibold ${STATUS_BADGE[row.status] ?? "bg-gray-50 text-gray-500 border-gray-200"}`}>
+                {row.status}
+              </span>
+            </td>
+            <td className="px-4 py-3 text-right font-mono text-gray-600 tabular-nums">
+              {row.payment_terms_days} d
+            </td>
+            <td className="px-4 py-3 text-right text-xs text-gray-500 tabular-nums">
+              {row.due_date ?? "—"}
+            </td>
+            <td className="px-4 py-3 text-right text-xs text-gray-500 tabular-nums">
+              {row.issue_date ?? "—"}
+            </td>
+            <td className="px-4 py-3 text-right">
+              {row.discrepancy_flag ? (
+                <span className="inline-flex justify-center px-2 py-0.5 rounded border text-xs font-semibold bg-red-50 text-red-700 border-red-200">Sí</span>
+              ) : (
+                <span className="inline-flex justify-center px-2 py-0.5 rounded border text-xs font-semibold bg-gray-50 text-gray-400 border-gray-200">No</span>
+              )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  );
+}
+
+function OverdueTable({ rows, onViewInvoices }: { rows: OverdueRow[]; onViewInvoices?: (supplier: string, buyer: string) => void }) {
+  return (
+    <table className="w-full text-sm">
+      <thead>
+        <tr className="bg-gray-50 border-b border-gray-100">
+          {([
+            { label: "Proveedor" },
+            { label: "Comprador" },
+            { label: "Facturas" },
+            { label: "Importe Vencido (€)" },
+            { label: "Plazo Medio", tooltip: "Plazo de pago medio escrito en las facturas vencidas, comparado con el plazo acordado en el contrato SUPPLIES. Verde = el comprador incumplió dentro del plazo acordado (breach claro) · Ámbar = el proveedor dio hasta +10% extra, el comprador igualmente no pagó · Rojo = el proveedor fue significativamente más generoso que el contrato y aun así no se cobró." },
+            { label: "" },
+          ] as { label: string; tooltip?: string }[]).map(({ label, tooltip }, i) => (
+            <th
+              key={label + i}
+              className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400 ${i > 1 && i < 5 ? "text-right" : "text-left"}`}
+            >
+              <span className={`inline-flex items-center gap-0.5 ${i > 1 && i < 5 ? "justify-end w-full" : ""}`}>
+                {label}
+                {tooltip && <InfoTooltip content={tooltip} direction="down" align={i > 1 ? "end" : "center"} />}
+              </span>
             </th>
           ))}
         </tr>
@@ -35,6 +105,17 @@ function OverdueTable({ rows }: { rows: OverdueRow[] }) {
                 {row.avg_payment_days.toFixed(0)} d
               </span>
             </td>
+            <td className="px-4 py-3 text-right">
+              {onViewInvoices && (
+                <button
+                  onClick={() => onViewInvoices(row.supplier, row.buyer)}
+                  title="Ver facturas vencidas"
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                >
+                  <EyeIcon className="w-4 h-4" />
+                </button>
+              )}
+            </td>
           </tr>
         ))}
       </tbody>
@@ -48,8 +129,41 @@ interface Props {
 }
 
 export function ExposureTab({ payment, overdue }: Props) {
-  const [showOverdueAll, setShowOverdueAll] = useState(false);
-  const [showPaymentAll, setShowPaymentAll] = useState(false);
+  const [showOverdueAll,   setShowOverdueAll]   = useState(false);
+  const [showPaymentAll,   setShowPaymentAll]   = useState(false);
+  const [selectedSupplier, setSelectedSupplier] = useState<string | null>(null);
+  const [supplierInvoices, setSupplierInvoices] = useState<SupplierInvoiceRow[]>([]);
+  const [loadingInvoices,  setLoadingInvoices]  = useState(false);
+
+  const [overduePair,         setOverduePair]         = useState<{ supplier: string; buyer: string } | null>(null);
+  const [overduePairInvoices, setOverduePairInvoices] = useState<SupplierInvoiceRow[]>([]);
+  const [loadingOverdue,      setLoadingOverdue]      = useState(false);
+
+  async function openSupplierInvoices(supplier: string) {
+    setSelectedSupplier(supplier);
+    setSupplierInvoices([]);
+    setLoadingInvoices(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/analytics/risk/supplier-invoices?supplier=${encodeURIComponent(supplier)}`);
+      if (res.ok) setSupplierInvoices(await res.json());
+    } finally {
+      setLoadingInvoices(false);
+    }
+  }
+
+  async function openOverduePairInvoices(supplier: string, buyer: string) {
+    setOverduePair({ supplier, buyer });
+    setOverduePairInvoices([]);
+    setLoadingOverdue(true);
+    try {
+      const res = await fetch(
+        `${API_BASE}/api/analytics/risk/supplier-pair-overdue?supplier=${encodeURIComponent(supplier)}&buyer=${encodeURIComponent(buyer)}`
+      );
+      if (res.ok) setOverduePairInvoices(await res.json());
+    } finally {
+      setLoadingOverdue(false);
+    }
+  }
 
   if (payment.length === 0 && overdue.length === 0) return EMPTY;
 
@@ -60,7 +174,7 @@ export function ExposureTab({ payment, overdue }: Props) {
   const totalInvoices  = payment.reduce((s, r) => s + r.invoice_count, 0);
   const totalOverdue   = overdue.reduce((s, r) => s + r.total_overdue_eur, 0);
   const overduePct     = totalExposure > 0 ? (totalOverdue / totalExposure) * 100 : 0;
-  const paymentSliced  = payment.slice(0, 20);
+  const paymentChartData = payment.slice(0, 20);
 
   return (
     <div className="space-y-10">
@@ -88,7 +202,7 @@ export function ExposureTab({ payment, overdue }: Props) {
               </div>
               <div className="p-5">
                 <BarChart
-                  data={paymentSliced}
+                  data={paymentChartData}
                   index="supplier"
                   category="total_exposure_eur"
                   layout="vertical"
@@ -105,18 +219,29 @@ export function ExposureTab({ payment, overdue }: Props) {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
-                    {["#", "Proveedor", "Exposición (€)", "% del total", "Pago medio (d)", "Nº Facturas"].map((h, i) => (
+                    {([
+                      { label: "#" },
+                      { label: "Proveedor" },
+                      { label: "Exposición (€)" },
+                      { label: "% del total" },
+                      { label: "Pago medio (d)", tooltip: "Media de payment_terms_days en las facturas emitidas, comparada con el plazo acordado contractualmente (SUPPLIES). Verde = respeta el contrato · Ámbar = hasta +10% · Rojo = supera el contrato." },
+                      { label: "Nº Facturas" },
+                      { label: "" },
+                    ] as { label: string; tooltip?: string }[]).map(({ label, tooltip }, i) => (
                       <th
-                        key={h}
-                        className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400 ${i > 1 ? "text-right" : "text-left"}`}
+                        key={label + i}
+                        className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400 ${i > 1 && i < 5 ? "text-right" : "text-left"}`}
                       >
-                        {h}
+                        <span className={`inline-flex items-center gap-0.5 ${i > 1 && i < 5 ? "justify-end w-full" : ""}`}>
+                          {label}
+                          {tooltip && <InfoTooltip content={tooltip} direction="down" align={i > 1 ? "end" : "center"} />}
+                        </span>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {paymentSliced.slice(0, PAGE_SIZE).map((row, i) => (
+                  {payment.slice(0, PAGE_SIZE).map((row, i) => (
                     <tr key={row.supplier} className="hover:bg-gray-50 transition-colors">
                       <td className="px-4 py-3 text-gray-400 text-xs tabular-nums w-8">{i + 1}</td>
                       <td className="px-4 py-3 text-gray-900 font-medium max-w-[200px] truncate">
@@ -144,13 +269,22 @@ export function ExposureTab({ payment, overdue }: Props) {
                       <td className="px-4 py-3 text-right font-mono text-gray-600 tabular-nums">
                         {row.invoice_count.toLocaleString("es-ES")}
                       </td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => openSupplierInvoices(row.supplier)}
+                          title="Ver facturas individuales"
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                        >
+                          <EyeIcon className="w-4 h-4" />
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
-              {paymentSliced.length > PAGE_SIZE && (
+              {payment.length > PAGE_SIZE && (
                 <div className="px-5 py-3 border-t border-gray-100 bg-gray-50">
-                  <ShowMoreButton total={paymentSliced.length} onClick={() => setShowPaymentAll(true)} />
+                  <ShowMoreButton total={payment.length} onClick={() => setShowPaymentAll(true)} />
                 </div>
               )}
             </div>
@@ -179,7 +313,7 @@ export function ExposureTab({ payment, overdue }: Props) {
             ]} />
 
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-              <OverdueTable rows={overdue.slice(0, PAGE_SIZE)} />
+              <OverdueTable rows={overdue.slice(0, PAGE_SIZE)} onViewInvoices={openOverduePairInvoices} />
               {overdue.length > PAGE_SIZE && (
                 <div className="px-5 pb-4">
                   <ShowMoreButton total={overdue.length} onClick={() => setShowOverdueAll(true)} />
@@ -191,20 +325,33 @@ export function ExposureTab({ payment, overdue }: Props) {
       </section>
 
       <SectionModal
-        title="Exposición Financiera — Top 20 proveedores"
+        title={`Exposición Financiera — ${payment.length} proveedores`}
         open={showPaymentAll}
         onClose={() => setShowPaymentAll(false)}
       >
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-100">
-              {["#", "Proveedor", "Exposición (€)", "% del total", "Pago medio (d)", "Nº Facturas"].map((h, i) => (
-                <th key={h} className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400 ${i > 1 ? "text-right" : "text-left"}`}>{h}</th>
+              {([
+                { label: "#" },
+                { label: "Proveedor" },
+                { label: "Exposición (€)" },
+                { label: "% del total" },
+                { label: "Pago medio (d)", tooltip: "Media de payment_terms_days en las facturas emitidas, comparada con el plazo acordado contractualmente (SUPPLIES). Verde = respeta el contrato · Ámbar = hasta +10% · Rojo = supera el contrato." },
+                { label: "Nº Facturas" },
+                { label: "" },
+              ] as { label: string; tooltip?: string }[]).map(({ label, tooltip }, i) => (
+                <th key={label + i} className={`px-4 py-3 text-[11px] font-semibold uppercase tracking-wide text-gray-400 ${i > 1 && i < 5 ? "text-right" : "text-left"}`}>
+                  <span className={`inline-flex items-center gap-0.5 ${i > 1 && i < 5 ? "justify-end w-full" : ""}`}>
+                    {label}
+                    {tooltip && <InfoTooltip content={tooltip} direction="down" align={i > 1 ? "end" : "center"} />}
+                  </span>
+                </th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {paymentSliced.map((row, i) => (
+            {payment.map((row, i) => (
               <tr key={row.supplier} className="hover:bg-gray-50 transition-colors">
                 <td className="px-4 py-3 text-gray-400 text-xs tabular-nums w-8">{i + 1}</td>
                 <td className="px-4 py-3 text-gray-900 font-medium max-w-[200px] truncate">{row.supplier}</td>
@@ -218,6 +365,15 @@ export function ExposureTab({ payment, overdue }: Props) {
                   </span>
                 </td>
                 <td className="px-4 py-3 text-right font-mono text-gray-600 tabular-nums">{row.invoice_count.toLocaleString("es-ES")}</td>
+                <td className="px-4 py-3 text-right">
+                  <button
+                    onClick={() => openSupplierInvoices(row.supplier)}
+                    title="Ver facturas individuales"
+                    className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                  >
+                    <EyeIcon className="w-4 h-4" />
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -229,7 +385,31 @@ export function ExposureTab({ payment, overdue }: Props) {
         open={showOverdueAll}
         onClose={() => setShowOverdueAll(false)}
       >
-        <OverdueTable rows={overdue} />
+        <OverdueTable rows={overdue} onViewInvoices={openOverduePairInvoices} />
+      </SectionModal>
+
+      <SectionModal
+        title={selectedSupplier ? `Facturas de ${selectedSupplier}` : ""}
+        open={selectedSupplier !== null}
+        onClose={() => setSelectedSupplier(null)}
+      >
+        {loadingInvoices ? (
+          <p className="text-center text-gray-400 text-sm py-10">Cargando facturas...</p>
+        ) : (
+          <SupplierInvoicesTable rows={supplierInvoices} />
+        )}
+      </SectionModal>
+
+      <SectionModal
+        title={overduePair ? `Facturas vencidas — ${overduePair.supplier} → ${overduePair.buyer}` : ""}
+        open={overduePair !== null}
+        onClose={() => setOverduePair(null)}
+      >
+        {loadingOverdue ? (
+          <p className="text-center text-gray-400 text-sm py-10">Cargando facturas...</p>
+        ) : (
+          <SupplierInvoicesTable rows={overduePairInvoices} />
+        )}
       </SectionModal>
 
     </div>

@@ -25,25 +25,23 @@ import { ExposureTab }      from "@/components/analytics/ExposureTab";
 import { TraceabilityTab }  from "@/components/analytics/TraceabilityTab";
 import { GdsTab }           from "@/components/analytics/GdsTab";
 import { ContractsTab }     from "@/components/analytics/ContractsTab";
-import { SynthesisTab }     from "@/components/analytics/SynthesisTab";
 
 /* ── Tab metadata ────────────────────────────────────── */
 const TABS = [
-  { index: 0, name: "Riesgo",        description: "Concentración de proveedores y scoring compuesto", icon: ShieldExclamationIcon },
-  { index: 1, name: "Discrepancias", description: "Calidad documental y tasa de error por proveedor", icon: ExclamationTriangleIcon },
-  { index: 2, name: "Lead Time",     description: "Cumplimiento de plazos de entrega por categoría",  icon: ClockIcon },
-  { index: 3, name: "Exposición",    description: "Cartera vencida y exposición financiera activa",   icon: CurrencyEuroIcon },
-  { index: 4, name: "Trazabilidad",  description: "Rutas documentales desde factura hasta pedido",   icon: LinkIcon },
-  { index: 5, name: "GDS",           description: "Centralidad, comunidades y componentes conexos",  icon: CpuChipIcon },
-  { index: 6, name: "Contratos",     description: "Perfil de contratos y distribución por tipo",     icon: DocumentTextIcon },
-  { index: 7, name: "Síntesis",      description: "Cruce multidimensional de riesgo geográfico",     icon: SparklesIcon },
+  { index: 0, name: "Contratos",     description: "Perfil de contratos y distribución por tipo",     icon: DocumentTextIcon },
+  { index: 1, name: "Riesgo",        description: "Concentración de proveedores y scoring compuesto", icon: ShieldExclamationIcon },
+  { index: 2, name: "Discrepancias", description: "Calidad documental y tasa de error por proveedor", icon: ExclamationTriangleIcon },
+  { index: 3, name: "Lead Time",     description: "Cumplimiento de plazos de entrega por categoría",  icon: ClockIcon },
+  { index: 4, name: "Exposición",    description: "Cartera vencida y exposición financiera activa",   icon: CurrencyEuroIcon },
+  { index: 5, name: "Trazabilidad",  description: "Rutas documentales desde factura hasta pedido",   icon: LinkIcon },
+  { index: 6, name: "GDS",           description: "Centralidad, comunidades y componentes conexos",  icon: CpuChipIcon },
 ];
 
 /* ── Inner content — reads search params ─────────────── */
 function AnalyticsContent() {
   const searchParams = useSearchParams();
   const rawTab       = parseInt(searchParams.get("tab") ?? "0", 10);
-  const activeTab    = isNaN(rawTab) || rawTab < 0 || rawTab > 7 ? 0 : rawTab;
+  const activeTab    = isNaN(rawTab) || rawTab < 0 || rawTab > 6 ? 0 : rawTab;
 
   const [loadingTab, setLoadingTab] = useState<number | null>(null);
   const [state, dispatch] = useReducer(analyticsReducer, INITIAL_ANALYTICS_STATE);
@@ -80,14 +78,13 @@ function AnalyticsContent() {
           <LoadingState text={`Cargando ${meta.name.toLowerCase()}...`} />
         ) : (
           <>
-            {activeTab === 0 && <RiskTab risk={state.risk} scores={state.scores} fragility={state.fragility} />}
-            {activeTab === 1 && <DiscrepanciesTab discrepancy={state.discrepancy} commercial={state.commercial} />}
-            {activeTab === 2 && <LeadTimeTab leadTime={state.leadTime} />}
-            {activeTab === 3 && <ExposureTab payment={state.payment} overdue={state.overdueRows} />}
-            {activeTab === 4 && <TraceabilityTab exactPaths={state.exactPaths} forward={state.forward} lineage={state.lineage} />}
-            {activeTab === 5 && <GdsTab gds={state.gds} />}
-            {activeTab === 6 && <ContractsTab contracts={state.contracts} contractDetail={state.contractDetail} />}
-            {activeTab === 7 && <SynthesisTab geographic={state.geographic} crossSuppliers={state.crossSuppliers} crossBuyers={state.crossBuyers} />}
+            {activeTab === 0 && <ContractsTab contracts={state.contracts} contractDetail={state.contractDetail} />}
+            {activeTab === 1 && <RiskTab risk={state.risk} scores={state.scores} fragility={state.fragility} geographic={state.geographic} />}
+            {activeTab === 2 && <DiscrepanciesTab discrepancy={state.discrepancy} commercial={state.commercial} />}
+            {activeTab === 3 && <LeadTimeTab leadTime={state.leadTime} />}
+            {activeTab === 4 && <ExposureTab payment={state.payment} overdue={state.overdueRows} />}
+            {activeTab === 5 && <TraceabilityTab exactPaths={state.exactPaths} forward={state.forward} lineage={state.lineage} />}
+            {activeTab === 6 && <GdsTab gds={state.gds} />}
           </>
         )}
       </div>
