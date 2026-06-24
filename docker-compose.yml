@@ -6,22 +6,22 @@ services:
       NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-AdminUser1234}
       NEO4J_PLUGINS: '["graph-data-science"]'
 
-      # Heap: JVM memory for query processing and transactions
-      NEO4J_server_memory_heap_initial__size: 256M
-      NEO4J_server_memory_heap_max__size: 512M
+      # Heap: conservative for 3.7GB VPS shared with backend/frontend
+      NEO4J_server_memory_heap_initial__size: 128M
+      NEO4J_server_memory_heap_max__size: 256M
 
-      # Page cache: reduced to leave headroom for heap during bulk writes
-      NEO4J_server_memory_pagecache_size: 256M
+      # Page cache: minimal to prevent OOM kill
+      NEO4J_server_memory_pagecache_size: 128M
 
-      # Transaction timeout: surfaces hangs as errors instead of silent freezes
-      NEO4J_db_transaction_timeout: 120s
+      # Transaction timeout: generous for bulk pipeline writes on VPS
+      NEO4J_db_transaction_timeout: 600s
 
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 800M
         reservations:
-          memory: 768M
+          memory: 512M
     volumes:
       - neo4j_data:/data
       - neo4j_logs:/logs
@@ -66,6 +66,7 @@ services:
       start_period: 30s
 
   pipeline-init:
+    profiles: ["pipeline"]
     build:
       context: .
       dockerfile: backend/Dockerfile
