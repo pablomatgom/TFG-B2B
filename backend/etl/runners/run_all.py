@@ -1,3 +1,8 @@
+"""Orquestador End-to-End del pipeline completo (Fases 1 → 2 → 3 → Seed).
+
+Encadena los cuatro runners en orden lógico estricto y agrega un artefacto
+de resumen con la lista de pasos ejecutados y sus rutas de auditoría.
+"""
 from __future__ import annotations
 
 import logging
@@ -21,15 +26,33 @@ def run_all(
     gamma: float,
     beta: float,
     mu: float,
-    min_comm: int,
-    max_comm: int,
     batch_size_loader: int,
     clear_db: bool = False,
     skip_seed: bool = False,
 ) -> list[Path]:
-    """
-    Ejecuta el pipeline completo de principio a fin (End-to-End).
-    Asegura que las fases se ejecuten en el orden lógico estricto.
+    """Ejecuta el pipeline completo de principio a fin.
+
+    Encadena las cuatro fases en orden estricto: generación de CSVs,
+    carga en Neo4j, análisis del grafo y seed de usuarios demo. El paso
+    ``seed`` puede omitirse con ``skip_seed=True``.
+
+    Args:
+        settings: Configuración del sistema (rutas, semilla, conexión Neo4j).
+        rows: Número de empresas a generar.
+        avg_degree_products: Grado de salida medio de productos por proveedor.
+        avg_degree_rel_supplies: Grado de salida medio en la red de suministros.
+        avg_degree_documents: Número medio de documentos por par
+            proveedor-comprador.
+        gamma: Exponente LFR de la distribución de grado.
+        beta: Exponente LFR de la distribución de tamaños de comunidad.
+        mu: Coeficiente de mezcla LFR (fracción de aristas inter-comunidad).
+        batch_size_loader: Filas por lote para la ingesta en Neo4j.
+        clear_db: Si es ``True``, vacía el grafo antes de cargar.
+        skip_seed: Si es ``True``, omite el paso de seed de usuarios demo.
+
+    Returns:
+        Rutas a los artefactos JSON de auditoría de cada paso,
+            incluyendo el resumen final ``all_last_run.json``.
     """
     logging.info(f"--- INICIO ORQUESTACIÓN END-TO-END (Seed: {settings.seed}) ---")
 
@@ -42,7 +65,6 @@ def run_all(
             avg_degree_rel_supplies=avg_degree_rel_supplies,
             avg_degree_documents=avg_degree_documents,
             gamma=gamma, beta=beta, mu=mu,
-            min_comm=min_comm, max_comm=max_comm,
         ),
         run_load(settings, batch_size_loader=batch_size_loader, clear_db=clear_db),
         run_analyze(settings),

@@ -30,11 +30,26 @@ _state: dict = {
 
 
 def _set_state(**kwargs: object) -> None:
+    """Actualiza ``_state`` garantizando exclusión mutua mediante el cerrojo ``_lock``.
+
+    Args:
+        **kwargs: Pares clave-valor que se fusionan en el diccionario ``_state``
+            (p. ej. ``status="running"``, ``progress=42``).
+    """
     with _lock:
         _state.update(kwargs)
 
 
 def _run_pipeline_task(request: PipelineRequest) -> None:
+    """Ejecuta el pipeline ETL completo en un hilo de fondo.
+
+    Diseñado para correr como ``daemon=True`` dentro de un ``threading.Thread``
+    para que el proceso no quede bloqueado si el hilo sigue vivo al apagar el
+    servidor.  Actualiza ``_state`` al inicio, al completar y en caso de error.
+
+    Args:
+        request: Configuración del pipeline recibida desde el endpoint REST.
+    """
     _set_state(status="running", started_at=datetime.now(UTC).isoformat(),
                finished_at=None, message="")
     try:
@@ -50,8 +65,6 @@ def _run_pipeline_task(request: PipelineRequest) -> None:
             gamma=request.gamma,
             beta=request.beta,
             mu=request.mu,
-            min_comm=request.min_comm,
-            max_comm=request.max_comm,
             batch_size_loader=request.batch_size,
             clear_db=request.clear_db,
         )
@@ -67,11 +80,21 @@ def _run_pipeline_task(request: PipelineRequest) -> None:
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/api/pipeline/run", status_code=202)
-def trigger_pipeline(request: PipelineRequest):
-    """
-    Starts the pipeline in a dedicated daemon thread and returns 202 immediately.
-    The thread is independent of FastAPI's thread pool so the server stays responsive.
-    Poll GET /api/pipeline/status to track progress.
+def trigger_pipeline(request: PipelineRequest) -> dict:
+    """Lanza el pipeline ETL en un hilo demonio y retorna 202 inmediatamente.
+
+    El hilo es independiente del pool de FastAPI, por lo que el servidor
+    sigue respondiendo durante la ejecución.  Consulta
+    ``GET /api/pipeline/status`` para seguir el progreso.
+
+    Args:
+        request: Parámetros completos de configuración del pipeline.
+
+    Returns:
+        ``{"status": "started", "message": "..."}``
+
+    Raises:
+        HTTPException: 409 si ya hay un pipeline en ejecución.
     """
     with _lock:
         if _state["status"] == "running":
@@ -83,6 +106,13 @@ def trigger_pipeline(request: PipelineRequest):
 
 
 @router.get("/api/pipeline/status")
-def get_pipeline_status():
+def get_pipeline_status() -> dict:
+    """Devuelve el estado actual del pipeline ETL.
+
+    Returns:
+        dict: Snapshot de ``_state`` con claves ``status`` (``idle`` |
+            ``running`` | ``success`` | ``error``), ``started_at``,
+            ``finished_at`` y ``message``.
+    """
     with _lock:
         return dict(_state)

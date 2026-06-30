@@ -9,9 +9,6 @@ class GDSMixin:
 
     def _run_gds(self, graph_name: str, project_q: str, compute_q: str) -> list[dict[str, Any]]:
         """Ejecuta el ciclo completo project → compute → drop en una sola sesión Neo4j.
-
-        - El drop inicial limpia proyecciones huérfanas de ejecuciones anteriores fallidas por SO.
-        - El drop final corre siempre en un bloque ``finally`` para garantizar limpieza ante fallos internos.
         
         Args:
             graph_name: Nombre único para la proyección en memoria de GDS.
@@ -21,12 +18,17 @@ class GDSMixin:
         Returns:
             Resultados de la consulta Cypher (un diccionario por fila):
                 
-                * Claves: Los alias definidos en el ``RETURN``.
-                * Valores: Tipos de datos nativos mapeados automáticamente por el driver.
+                * **Claves:** Los alias definidos en el ``RETURN``.
+                * **Valores:** Los tipos de datos nativos mapeados automáticamente por el driver.
                 
                 Ejemplo para ``compute_betweenness_centrality``:
 
                     [{"company_id": "C01", "legal_name": "Acme S.L.", "betweenness_score": 42.0}, …]
+        
+        Note:
+            El drop inicial limpia proyecciones huérfanas de ejecuciones anteriores fallidas 
+            por SO mientras que el drop final corre siempre en un bloque ``finally`` 
+            para garantizar limpieza ante fallos internos.
         """
         drop_q = f"CALL gds.graph.drop('{graph_name}', false) YIELD graphName"
         with self._driver.session(database=self.neo4j_database) as s:
@@ -43,17 +45,6 @@ class GDSMixin:
     def compute_betweenness_centrality(self) -> pd.DataFrame:
         r"""Identifica empresas que actúan como cuellos de botella en la red de suministro.
 
-        El *score* bruto de GDS cuenta cuántos caminos mínimos entre pares de nodos pasan 
-        a través de cada empresa. Se normaliza con la fórmula estándar para grafos dirigidos:
-
-        $$\text{normalized_pct} = \frac{\text{score}}{(n-1)(n-2)} \times 100$$
-
-        donde $n$ es el número total de nodos ``Company``. 
-        
-        Solo se devuelven empresas con
-        score > 0 por lo que los nodos hoja puros (un único proveedor o un único comprador) no tienen
-        rol de intermediario y se excluyen.
-
         Returns:
             DataFrame con una fila por empresa intermediaria y las columnas:
 
@@ -65,11 +56,25 @@ class GDSMixin:
                 | ``betweenness_score`` | float | Nº de caminos mínimos que pasan por este nodo |
                 | ``normalized_pct`` | float | Score como % del máximo teórico para el grafo dirigido |
 
-        Note:
-            La proyección usa orientación **dirigida** (``SUPPLIES`` conserva su sentido
-            proveedor → comprador). Esto captura asimetría por lo que una empresa que conecta
-            proveedores upstream con compradores downstream puntúa más que una que solo
-            conecta pares al mismo nivel.
+        Notes:
+            **Cálculo y Normalización:**
+            El score bruto de GDS cuenta cuántos caminos mínimos entre pares de nodos 
+            pasan a través de cada empresa. Se normaliza mediante la fórmula estándar 
+            para grafos dirigidos:
+
+            $$\text{normalized_pct} = \frac{\text{score}}{(n-1)(n-2)} \times 100$$
+
+            donde $n$ es el número total de nodos ``Company``. 
+            
+            **Criterio de Exclusión:**
+            Solo se devuelven empresas con score > 0, excluyendo los nodos hoja puros 
+            (un único proveedor o un único comprador) al carecer de rol intermediario.
+
+            **Proyección del Grafo:**
+            Se utiliza una orientación estrictamente dirigida (``SUPPLIES`` conserva 
+            el sentido proveedor → comprador). Esto captura la asimetría de la red, 
+            haciendo que un nodo que conecte proveedores upstream con compradores 
+            downstream obtenga mayor puntuación que uno conectando nodos del mismo nivel.
         """
         graph_name = "b2b_betweenness"
 
@@ -98,12 +103,7 @@ class GDSMixin:
         return df
 
     def compute_pagerank(self) -> pd.DataFrame:
-        """Detecta proveedores con alta influencia estructural.
-        
-        PageRank propaga importancia a través de los enlaces ``SUPPLIES``, done un proveedor
-        que abastece a muchos compradores relevantes recibe un score alto aunque su grado
-        directo sea moderado. Las aristas se ponderan por ``agreed_volume_baseline`` para
-        que las relaciones de mayor volumen contribuyan más al cálculo.
+        """Detecta proveedores con alta influencia estructural en la red.
 
         Returns:
             DataFrame ordenado de mayor a menor ``pagerank_score`` con las columnas:
@@ -115,10 +115,21 @@ class GDSMixin:
                 | ``role`` | str | ``SUPPLIER``, ``BUYER`` o ``HYBRID`` |
                 | ``pagerank_score`` | float | Score de influencia estructural (no acotado) |
 
-        Note:
-            El peso ``agreed_volume_baseline`` usa ``defaultValue: 1.0`` como fallback
-            para aristas ``SUPPLIES`` que no tengan ese atributo, evitando fallos de
-            proyección en grafos con datos incompletos.
+        Notes:
+            **Propagación de Influencia (PageRank):**
+            El algoritmo propaga la importancia a través de los enlaces ``SUPPLIES``. 
+            Un proveedor que abastece a muchos compradores relevantes recibe un score 
+            alto, incluso si su grado directo (número de clientes) es moderado. 
+            
+            **Ponderación de Aristas:**
+            Las relaciones se ponderan mediante el atributo ``agreed_volume_baseline`` 
+            para que los suministros de mayor volumen contribuyan proporcionalmente 
+            más al cálculo de influencia.
+            
+            **Tolerancia a Datos Incompletos:**
+            La proyección del grafo asigna ``defaultValue: 1.0`` como fallback para 
+            las aristas ``SUPPLIES`` que carezcan de volumen definido, evitando fallos 
+            de proyección en el motor GDS.
         """
         graph_name = "b2b_pagerank"
 
@@ -152,10 +163,6 @@ class GDSMixin:
     def detect_communities_louvain(self) -> pd.DataFrame:
         """Detecta ecosistemas industriales y clústeres de empresas densamente interconectadas.
         
-        Louvain maximiza la **modularidad** de la red mediante una búsqueda heurística
-        iterativa que agrupa nodos densamente interconectados. Cada comunidad resultante
-        representa una cadena de suministro cohesionada o un ecosistema logístico propio.
-        
         Returns:
             DataFrame ordenado de mayor a menor ``total_empresas`` con las columnas:
 
@@ -163,13 +170,25 @@ class GDSMixin:
                 |---|---|---|
                 | ``communityId`` | int | ID interno de GDS (no estable entre ejecuciones) |
                 | ``total_empresas`` | int | Número de empresas en el clúster |
-                | ``ejemplos_empresas`` | list[str] | Razones sociales de todas las empresas del clúster |
+                | ``ejemplos_empresas`` | list[dict] | Datos detallados (nombre, rol, región, etc.) de las empresas del clúster |
 
-        Note:
-            La proyección usa orientación ``UNDIRECTED`` porque Louvain requiere un grafo
-            no dirigido por lo que cada arista ``SUPPLIES`` se trata como bidireccional a 
-            efectos del cálculo de modularidad, lo que es correcto para detectar ecosistemas
-            donde la dirección del flujo comercial es menos relevante que la cohesión del grupo.
+        Notes:
+            **Maximización de Modularidad (Louvain):**
+            El algoritmo agrupa nodos mediante una búsqueda heurística iterativa que 
+            maximiza la modularidad de la red. Cada comunidad detectada representa 
+            una cadena de suministro cohesionada o un ecosistema logístico propio.
+            
+            **Proyección del Grafo (UNDIRECTED):**
+            La proyección fuerza la orientación ``UNDIRECTED`` en las relaciones 
+            ``SUPPLIES``. El algoritmo de Louvain requiere un grafo no dirigido para 
+            calcular la modularidad de forma matemáticamente correcta, priorizando 
+            la cohesión estructural del grupo por encima de la direccionalidad del 
+            flujo comercial.
+
+            **Ponderación de Aristas:**
+            Al igual que en otros algoritmos de influencia, las conexiones utilizan 
+            ``agreed_volume_baseline`` como peso (con un valor por defecto de 1.0) 
+            para que los flujos de mayor volumen consoliden mejor las comunidades.
         """
         graph_name = "b2b_louvain"
 
@@ -208,12 +227,7 @@ class GDSMixin:
     # ── Conectividad ─────────────────────────────────────────────────────────
 
     def detect_weakly_connected_components(self) -> dict:
-        """Evalúa la salud estructural y la cohesión de la red detectando fragmentación en islas.
-
-        WCC (Weakly Connected Components) agrupa nodos que están conectados ignorando
-        la dirección de los enlaces. Una red sana presenta un componente principal grande
-        y pocos nodos aislados; muchos componentes pequeños indican fragmentación severa
-        que limita la propagación de información o riesgo.
+        """Evalúa la salud estructural y la cohesión de la red detectando su nivel de fragmentación.
 
         Returns:
             Diccionario con las claves:
@@ -226,11 +240,23 @@ class GDSMixin:
                 | ``isolated_nodes`` | int | Empresas completamente desconectadas (componentes de tamaño 1) |
                 | ``components`` | list[dict] | Lista completa ``[{component_id, size}, …]`` |
 
-        Note:
-            La proyección es ``UNDIRECTED`` porque WCC pregunta únicamente «¿existe
-            algún camino entre estos dos nodos?», sin importar la dirección del flujo.
-            Un ``main_component_pct`` > 90 % se considera red cohesionada; por debajo
-            de ese umbral conviene investigar proveedores o compradores sin conexiones.
+        Notes:
+            **Algoritmo WCC (Weakly Connected Components):**
+            Agrupa nodos que están conectados entre sí ignorando la dirección de los 
+            enlaces. Evalúa la topología puramente en base a la existencia de caminos.
+
+            **Proyección del Grafo (UNDIRECTED):**
+            Se utiliza una proyección no dirigida, ya que WCC busca responder a la 
+            pregunta «¿existe algún camino entre estos dos nodos?» sin importar si el 
+            flujo comercial es de compra o de venta.
+
+            **Diagnóstico de Salud Estructural:**
+            Una red sana presenta un componente principal masivo y muy pocos nodos 
+            aislados. Un valor de ``main_component_pct`` > 90 % se considera indicativo 
+            de una red altamente cohesionada. Por el contrario, la presencia de múltiples 
+            componentes pequeños evidencia una fragmentación severa que limita la 
+            propagación de información o riesgo, lo que requiere investigar los nodos 
+            desconectados.
         """
         graph_name = "b2b_wcc"
 

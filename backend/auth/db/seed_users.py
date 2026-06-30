@@ -1,4 +1,9 @@
-#!/usr/bin/env python3
+"""Seeding de usuarios demo en SQLite a partir de las empresas en Neo4j.
+
+Se ejecuta como última fase del pipeline (``run_seed``) para poblar la base
+de datos relacional con un usuario por empresa y un administrador global,
+permitiendo probar el sistema de autenticación sin registros manuales.
+"""
 
 from __future__ import annotations
 
@@ -17,10 +22,28 @@ DEMO_PASSWORD = "Demo1234!"
 
 
 def seed(settings: Settings) -> dict:
-    """
-    Create one demo user per Company node in Neo4j plus an admin user.
-    Returns a stats dict with created/skipped counts.
-    Raises RuntimeError if no companies are found in Neo4j.
+    """Crea un usuario demo por empresa en Neo4j y un administrador global.
+
+    Lee todos los nodos ``Company`` del grafo, genera un usuario SQLite por
+    cada uno con email ``company{i}@demo.com`` y la contraseña compartida
+    ``DEMO_PASSWORD``.  Si el usuario ya existe lo omite y siempre se garantiza
+    la existencia de ``admin@demo.com`` con rol ``admin``.
+
+    Args:
+        settings: Configuración del sistema con credenciales de Neo4j y
+            la ruta a la base de datos SQLite.
+
+    Returns:
+        Estadísticas de la operación con claves:
+
+            - ``users_created``: número de usuarios nuevos insertados.
+            - ``users_skipped``: número de usuarios que ya existían.
+            - ``sqlite_db``: ruta absoluta al fichero ``users.db``.
+            - ``demo_password``: contraseña usada para todos los usuarios.
+
+    Raises:
+        RuntimeError: Si no hay nodos ``Company`` en Neo4j (pipeline no
+            ejecutado aún).
     """
     logger.info(f"Conectando a Neo4j en {settings.neo4j_uri}.")
     driver = GraphDatabase.driver(

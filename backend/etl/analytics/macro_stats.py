@@ -249,6 +249,8 @@ class MacroMixin:
 
             $$G = \frac{2 \sum_{i=1}^{n} (i \cdot v_i) - (n + 1) \cdot \text{total}}{n \cdot \text{total}}$$
             
+            Ecuación que se implementa en el código de esta función.
+            
         """
         if not values or sum(values) == 0:
             return 0.0
@@ -261,16 +263,6 @@ class MacroMixin:
     @staticmethod
     def _build_scale_free_metrics(degrees: list[int]) -> dict[str, Any]:
         """Calcula los indicadores estadísticos que validan si la red LFR representa una topología scale-free.
-
-        Evalúa la distribución de los grados de salida de la red mediante estadísticos 
-        descriptivos y contrasta dos señales diagnósticas fundamentales de la ley de potencias:
-
-        - **Gini > 0.5**: Refleja la presencia de una desigualdad de conexiones representativa de redes scale-free.
-        - **max_mean_ratio >> 5**: Confirma la presencia de una cola derecha lo bastante larga como para descartar
-            una distribución aleatoria.
-
-        Los *hubs* estructurales se clasifican siguiendo el umbral estadístico de la cola derecha 
-        determinado por una distancia superior a dos desviaciones estándar de la media.
         
         Args:
             degrees: Secuencia con el grado de salida por cada nodo ``Company``.
@@ -289,6 +281,19 @@ class MacroMixin:
                 | ``hub_count`` | int | Nº nodos clasificados como *hubs* |
                 | ``hub_threshold`` | float | Umbral de corte empleado para los *hubs* |
                 | ``max_mean_ratio`` | float | Factor de escala de la cola larga |
+        
+        Notes:
+            Analiza la topología de la red mediante estadística descriptiva sobre 
+            los grados de salida, validando dos propiedades clave de las 
+            distribuciones de ley de potencias:
+            
+            * **Gini > 0.5**: Refleja la presencia de una desigualdad de conexiones 
+                representativa de redes scale-free.
+            * **max_mean_ratio >> 5**: Confirma la presencia de una cola derecha lo 
+                bastante larga como para descartar una distribución aleatoria.
+              
+            Los *hubs* estructurales se clasifican siguiendo el umbral estadístico 
+            determinado por una distancia superior a dos desviaciones estándar de la media.
         """
         if not degrees:
             return {}

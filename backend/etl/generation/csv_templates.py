@@ -1,3 +1,9 @@
+"""Definición de esquemas CSV y utilidades para crear ficheros vacíos con cabeceras.
+
+``CSV_SCHEMAS`` es la fuente única de verdad para los nombres y tipos de
+columnas de cada CSV del modelo B2B.  ``create_csv_templates`` inicializa
+los ficheros con sus cabeceras antes de que los sintetizadores los rellenen.
+"""
 from __future__ import annotations
 
 import csv
@@ -96,11 +102,28 @@ def _normalize_csv_name(name: str) -> str:
 
 
 def get_available_targets() -> list[str]:
+	"""Devuelve los nombres de los CSV disponibles (sin extensión), ordenados alfabéticamente.
+
+	Returns:
+		Nombres de los datasets disponibles (sin extensión), ordenados alfabéticamente.
+	"""
 	stems = [filename[:-4] for filename in CSV_SCHEMAS]
 	return sorted(stems)
 
 
 def resolve_csv_targets(csv_target: str) -> list[str]:
+	"""Determina qué archivos CSV deben procesarse según el objetivo indicado.
+
+	Args:
+		csv_target: ``"all"`` para todos los datasets, o el nombre de un CSV
+			concreto (con o sin extensión ``.csv``).
+
+	Returns:
+		Lista de nombres de fichero CSV ordenados.
+
+	Raises:
+		ValueError: Si ``csv_target`` no es ``"all"`` ni un nombre de CSV válido.
+	"""
 	value = _normalize_csv_name(csv_target)
 	if value == "all":
 		return sorted(CSV_SCHEMAS.keys())
@@ -114,6 +137,19 @@ def resolve_csv_targets(csv_target: str) -> list[str]:
 
 
 def create_csv_templates(output_dir: Path, csv_target: str) -> list[Path]:
+	"""Crea ficheros CSV vacíos con las cabeceras definidas en ``CSV_SCHEMAS``.
+
+	Args:
+		output_dir: Directorio de destino (``data/synthetic/``).
+		csv_target: ``"all"`` para crear todos los CSVs, o el nombre de uno
+			concreto (p. ej. ``"companies.csv"``).
+
+	Returns:
+		Lista de rutas a los ficheros CSV creados.
+
+	Raises:
+		ValueError: Si ``csv_target`` no es un selector válido.
+	"""
 	output_dir.mkdir(parents=True, exist_ok=True)
 	targets = resolve_csv_targets(csv_target)
 	created_files: list[Path] = []

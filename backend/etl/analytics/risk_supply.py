@@ -132,7 +132,26 @@ class OperationalMixin:
     """Cumplimiento operativo, concentración de riesgo y distribución geográfica."""
 
     def get_supplier_pair_overdue_invoices(self, supplier_name: str, buyer_name: str) -> pd.DataFrame:
-        """Devuelve las facturas OVERDUE entre un par proveedor-comprador concreto."""
+        """Devuelve las facturas vencidas (``OVERDUE``) emitidas entre un par proveedor-comprador concreto.
+
+        Args:
+            supplier_name: Razón social exacta del proveedor (``Company.legal_name``).
+            buyer_name: Razón social exacta del comprador (``Company.legal_name``).
+
+        Returns:
+            DataFrame ordenado por ``gross_amount`` descendente con las columnas:
+
+                | Columna | Tipo | Descripción |
+                |---|---|---|
+                | ``document_id`` | str | Identificador único de la factura |
+                | ``buyer`` | str | Razón social del comprador receptor |
+                | ``gross_amount`` | float | Importe bruto de la factura (€) |
+                | ``status`` | str | Estado del documento (siempre ``OVERDUE``) |
+                | ``payment_terms_days`` | int | Plazo de pago acordado en la factura (días) |
+                | ``due_date`` | str | Fecha de vencimiento |
+                | ``issue_date`` | str | Fecha de emisión |
+                | ``discrepancy_flag`` | bool | Si la factura tiene una discrepancia activa |
+        """
         return pd.DataFrame(self._fetch_data(_Q_SUPPLIER_PAIR_OVERDUE, supplier_name=supplier_name, buyer_name=buyer_name))
 
     def get_supplier_invoices(self, supplier_name: str) -> pd.DataFrame:
@@ -151,8 +170,8 @@ class OperationalMixin:
                 | ``gross_amount`` | float | Importe bruto de la factura (€) |
                 | ``status`` | str | Estado del documento (``PENDING / PARTIAL / OVERDUE / PAID``) |
                 | ``payment_terms_days`` | int | Plazo de pago acordado en la factura (días) |
-                | ``due_date`` | str | Fecha de vencimiento (ISO 8601) |
-                | ``issue_date`` | str | Fecha de emisión (ISO 8601) |
+                | ``due_date`` | str | Fecha de vencimiento |
+                | ``issue_date`` | str | Fecha de emisión |
                 | ``discrepancy_flag`` | bool | Si la factura tiene una discrepancia activa |
         """
         return pd.DataFrame(self._fetch_data(_Q_SUPPLIER_INVOICES, supplier_name=supplier_name))

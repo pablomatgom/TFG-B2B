@@ -1,3 +1,10 @@
+"""Sintetizador de empresas con topología LFR y anclaje geográfico real.
+
+Genera ``companies.csv`` usando el modelo Lancichinetti-Fortunato-Radicchi (LFR)
+para producir comunidades con distribuciones de grado power-law realistas.
+Los municipios reales de ``data/raw/municipios_espana.csv`` anclan la ubicación
+geográfica de cada empresa dentro de su comunidad.
+"""
 from __future__ import annotations
 import argparse
 import csv
@@ -21,21 +28,42 @@ GEO_JITTER_DEG = 0.015
 fake = Faker("es_ES")
 
 
-@dataclass(frozen=True) # Hace que la clase sea inmutable.
+@dataclass(frozen=True)
 class MunicipalityPoint:
-    """Punto geográfico de un municipio español, con su población para ponderar la topología."""
+    """Punto geográfico de un municipio español ponderado por población.
+
+    Attributes:
+        province: Nombre de la provincia (clave de comunidad latente).
+        municipality: Nombre del municipio.
+        lat: Latitud en grados decimales.
+        lon: Longitud en grados decimales.
+        population: Habitantes censados, usado como peso en el muestreo geográfico.
+    """
+
     province: str
     municipality: str
-    lat: float      
-    lon: float      
+    lat: float
+    lon: float
     population: int
 
 
 @dataclass(frozen=True)
 class LFRProfile:
-    """Perfil latente LFR para condicionar atributos de cada empresa."""
+    """Perfil LFR asignado a cada empresa durante la síntesis.
+
+    Attributes:
+        community_id: Identificador de la comunidad LFR a la que pertenece.
+        anchor_province: Provincia de anclaje para sesgar la ubicación
+            geográfica de la empresa dentro de su comunidad.
+        preferred_industries: Tupla de códigos NACE preferidos por la comunidad.
+        degree_propensity: Grado de conectividad esperado del nodo en la red
+            (muestreado con distribución Pareto controlada por ``gamma``).
+        mixing_mu: Proporción de aristas inter-comunidad para este nodo
+            (muestreada con distribución Beta centrada en ``mu``).
+    """
+
     community_id: int
-    anchor_province: str      # Provincia de anclaje para sesgar la ubicación geográfica de la empresa dentro de su comunidad.
+    anchor_province: str
     preferred_industries: tuple[str, ...]
     degree_propensity: float
     mixing_mu: float
@@ -54,29 +82,50 @@ def get_companies_parser() -> argparse.ArgumentParser:
     group.add_argument("--gamma", type=float, default=2.4, help="Gamma: Exponente de la distribución de grados (Grado de nodos)", metavar="N")
     group.add_argument("--beta", type=float, default=1.8, help="Beta: Exponente de la distribución de tamaños de comunidad", metavar="N")
     group.add_argument("--mu", type=float, default=0.30, help="Mixing parameter (mu): Proporción de enlaces inter-comunidad", metavar="N")
-    group.add_argument("--min-community", type=int, default=6, help="Tamaño mínimo de cada comunidad", metavar="N")
-    group.add_argument("--max-community", type=int, default=45, help="Tamaño máximo de cada comunidad", metavar="N")
     return parser
 
 
 # =============================================================================
 #  FUNCIÓN PRINCIPAL (MAIN)
 # =============================================================================
-def synthesize_companies_csv(output_file: Path, cities_csv: Path, rows: int, seed: int, 
-                             gamma: float, beta: float, mu: float, min_comm: int, max_comm: int) -> Path:
-    """Función principal que genera el archivo CSV final de empresas (companies.csv)."""
-    if rows <= 0: 
+def synthesize_companies_csv(output_file: Path, cities_csv: Path, rows: int, seed: int,
+                             gamma: float, beta: float, mu: float) -> Path:
+    """Genera companies.csv con topología LFR y anclaje geográfico real.
+
+    Los tamaños de comunidad se calculan dinámicamente:
+    ``min_comm = max(4, rows^0.40)`` y ``max_comm = max(min_comm+5, rows//5)``.
+
+    Args:
+        output_file: Ruta del fichero CSV de salida.
+        cities_csv: Ruta al CSV de municipios españoles (``municipios_espana.csv``).
+        rows: Número de empresas (nodos ``Company``) a generar.
+        seed: Semilla para reproducibilidad.
+        gamma: Exponente de la ley de potencias para la distribución de grados
+            del modelo LFR. Debe ser ``> 1.0``.
+        beta: Exponente de la ley de potencias para el tamaño de las comunidades
+            LFR. Debe ser ``> 1.0``.
+        mu: Coeficiente de mezcla LFR para la conexión inter-comunidad.
+            Debe ser ``0 <= mu < 1.0``.
+
+    Returns:
+        Ruta al fichero CSV escrito.
+
+    Raises:
+        ValueError: Si ``rows <= 0``, ``gamma`` o ``beta ≤ 1.0``, o ```0 <= mu < 1.0``.
+    """
+    if rows <= 0:
         logging.error("El número de filas solicitado es inválido (<= 0).")
         raise ValueError("El número de filas debe ser > 0")
-    if gamma <= 1.0 or beta <= 1.0: 
+    if gamma <= 1.0 or beta <= 1.0:
         logging.error("Los hiperparámetros topológicos Gamma y Beta deben ser estrictamente > 1.0")
         raise ValueError("gamma y beta deben ser > 1.0")
-    if not (0 <= mu <= 1): 
+    if not (0 <= mu <= 1):
         logging.error("El mixing parameter (mu) está fuera del rango probabilístico [0, 1].")
         raise ValueError("mu (mixing parameter) debe estar entre 0.0 y 1.0")
-    if min_comm <= 0 or min_comm > max_comm: 
-        logging.error("Incongruencia en los límites de tamaño de comunidad LFR.")
-        raise ValueError("Límites de comunidad inválidos.")
+
+    min_comm = max(4, int(rows ** 0.40))
+    max_comm = max(min_comm + 5, rows // 5)
+    logging.info(f"         Comunidades LFR (calculado): min={min_comm}, max={max_comm}")
 
     # Inicializacion de motores aleatorios (estándar y el de Faker) con la semilla
     rng = random.Random(seed)
@@ -165,7 +214,17 @@ def synthesize_companies_csv(output_file: Path, cities_csv: Path, rows: int, see
 #  LÓGICA DE ALTO NIVEL (FUNCIONES AUXILIARES PARA SINTETIZAR EMPRESAS)
 # =============================================================================
 def load_municipalities(csv_path: Path) -> tuple[list[MunicipalityPoint], list[int]]:
-    """Carga el dataset geográfico de municipios extrayendo sus pesos poblacionales."""
+    """Carga el dataset geográfico de municipios y sus pesos poblacionales.
+
+    Args:
+        csv_path: Ruta al CSV ``municipios_espana.csv``.
+
+    Returns:
+        Lista de municipios y sus pesos (población) para muestreo ponderado.
+
+    Raises:
+        ValueError: Si el CSV no contiene municipios válidos.
+    """
     municipalities = []
     municipality_weights = []
     
@@ -199,9 +258,24 @@ def load_municipalities(csv_path: Path) -> tuple[list[MunicipalityPoint], list[i
     return municipalities, municipality_weights
 
 
-def _build_lfr_profiles(rows: int, municipalities: list[MunicipalityPoint], municipality_weights: list[int], rng: random.Random, 
+def _build_lfr_profiles(rows: int, municipalities: list[MunicipalityPoint], municipality_weights: list[int], rng: random.Random,
                         gamma: float, beta: float, mu: float, min_comm: int, max_comm: int) -> list[LFRProfile]:
-    """Construye perfiles LFR latentes para todas las empresas a sintetizar."""
+    """Construye perfiles LFR latentes para todas las empresas a sintetizar.
+
+    Args:
+        rows: Número total de empresas a generar.
+        municipalities: Lista de municipios cargada desde ``municipios_espana.csv``.
+        municipality_weights: Pesos poblacionales paralelos a ``municipalities``.
+        rng: Generador aleatorio inicializado con la semilla global.
+        gamma: Exponente de la distribución de grados (Pareto).
+        beta: Exponente de la distribución de tamaños de comunidad (Pareto).
+        mu: Coeficiente de mezcla LFR global (center de la Beta por nodo).
+        min_comm: Tamaño mínimo de comunidad.
+        max_comm: Tamaño máximo de comunidad.
+
+    Returns:
+        Lista de ``LFRProfile`` barajada aleatoriamente, una entrada por empresa.
+    """
     community_sizes = _sample_community_sizes(beta, min_comm, max_comm, rows, rng)
     community_sizes.sort(reverse=True)
     most_populated_province = _get_most_populated_province(municipalities)
@@ -240,7 +314,15 @@ def _build_lfr_profiles(rows: int, municipalities: list[MunicipalityPoint], muni
 #  FUNCIONES AUXILIARES (Helpers / Utils)
 # =============================================================================
 def _size_band_from_lfr(degree_propensity: float, rng: random.Random) -> str:
-    """Sesga la categoría de size_band según la jerarquía de grado del nodo en la red."""
+    """Sesga la categoría de size_band según la jerarquía de grado del nodo en la red.
+
+    Args:
+        degree_propensity: Grado esperado del nodo, muestreado de una distribución Pareto.
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Una de las categorías de ``SIZE_BANDS``: ``micro``, ``pyme``, ``mid`` o ``enterprise``.
+    """
     if degree_propensity >= 10: 
         weights = [0.10, 0.25, 0.40, 0.25] # Nodos con grado altos suelen ser medianas o grandes empresas.
     elif degree_propensity >= 4:
@@ -251,7 +333,16 @@ def _size_band_from_lfr(degree_propensity: float, rng: random.Random) -> str:
 
 
 def _node_role_from_lfr(degree_propensity: float, mixing_mu: float, rng: random.Random) -> str:
-    """Asigna el rol operativo (SUPPLIER, BUYER, HYBRID) sesgado por la importancia del nodo."""
+    """Asigna el rol operativo (SUPPLIER, BUYER, HYBRID) sesgado por la importancia del nodo.
+
+    Args:
+        degree_propensity: Grado esperado del nodo; valores altos favorecen el rol ``HYBRID``.
+        mixing_mu: Proporción de aristas inter-comunidad; valores altos favorecen ``BUYER``.
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Una de las cadenas de ``NODE_ROLES``: ``SUPPLIER``, ``BUYER`` o ``HYBRID``.
+    """
     if degree_propensity >= 8: 
         weights = [0.10, 0.10, 0.80] # Nodos con alto grado tienden a ser hibridos.
     elif mixing_mu >= 0.5: 
@@ -263,13 +354,29 @@ def _node_role_from_lfr(degree_propensity: float, mixing_mu: float, rng: random.
 
 
 def _industry_from_lfr(preferred_industries: tuple[str, ...], rng: random.Random) -> str:
-    """Asigna la industria haciendo que las preferidas del clúster sean 4 veces más probables."""
+    """Asigna la industria haciendo que las preferidas del clúster sean 4 veces más probables.
+
+    Args:
+        preferred_industries: Códigos NACE preferidos por la comunidad LFR del nodo.
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Código NACE seleccionado (p. ej. ``C25``, ``G46``).
+    """
     weights = [4.0 if code in preferred_industries else 1.0 for code in INDUSTRY_CODES]
     return rng.choices(INDUSTRY_CODES, weights=weights, k=1)[0]
 
 
 def _baseline_revenue(size_band: str, rng: random.Random) -> float:
-    """Asigna ingresos anuales (baseline_revenue) coherentes con el tamaño de la empresa."""
+    """Asigna ingresos anuales (baseline_revenue) coherentes con el tamaño de la empresa.
+
+    Args:
+        size_band: Categoría de tamaño de la empresa (``micro``, ``pyme``, ``mid``, ``enterprise``).
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Importe anual de ingresos base (€), redondeado a dos decimales.
+    """
     ranges = {
             "micro": (30_000, 600_000),
             "pyme": (600_000, 4_000_000),
@@ -280,8 +387,19 @@ def _baseline_revenue(size_band: str, rng: random.Random) -> float:
     return round(rng.uniform(low, high), 2)
 
 
-def _sample_community_sizes(beta: float, min_comm: int, max_comm: int,rows: int, rng: random.Random) -> list[int]:
-    """Genera tamaños de comunidad con distribución tipo power-law acotadas."""
+def _sample_community_sizes(beta: float, min_comm: int, max_comm: int, rows: int, rng: random.Random) -> list[int]:
+    """Genera tamaños de comunidad con distribución tipo power-law acotadas.
+
+    Args:
+        beta: Exponente de la distribución Pareto para tamaños de comunidad.
+        min_comm: Tamaño mínimo permitido por comunidad.
+        max_comm: Tamaño máximo permitido por comunidad.
+        rows: Número total de empresas que deben quedar cubiertas.
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Lista de enteros que suman exactamente ``rows``, cada uno en ``[min_comm, max_comm]``.
+    """
     sizes: list[int] = []
     total = 0
     while total < rows:
@@ -295,7 +413,14 @@ def _sample_community_sizes(beta: float, min_comm: int, max_comm: int,rows: int,
 
 
 def _get_most_populated_province(municipalities: list[MunicipalityPoint]) -> str:
-    """Calcula la provincia con mayor población AGREGADA."""
+    """Calcula la provincia con mayor población agregada.
+
+    Args:
+        municipalities: Lista completa de municipios cargada desde el CSV geográfico.
+
+    Returns:
+        Nombre de la provincia con la suma de habitantes más alta.
+    """
     pop_by_province = {}
     for mun in municipalities:
         pop_by_province[mun.province] = pop_by_province.get(mun.province, 0) + mun.population
@@ -305,7 +430,15 @@ def _get_most_populated_province(municipalities: list[MunicipalityPoint]) -> str
 
 
 def _sample_degree_propensity(gamma: float, rng: random.Random) -> float:
-    """Calcula el grado esperado usando el gamma proporcionado."""
+    """Calcula el grado esperado del nodo usando una distribución Pareto parametrizada por ``gamma``.
+
+    Args:
+        gamma: Exponente de la distribución de grados LFR. Debe ser ``> 1.0``.
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Grado esperado acotado en el rango ``[1.0, 30.0]``.
+    """
     alpha = max(gamma - 1.0, 1.05)
     # Distribución de pareto para sesgar hacia nodos con bajo grado
     return max(1.0, min(rng.paretovariate(alpha), 30.0)) 
@@ -313,7 +446,15 @@ def _sample_degree_propensity(gamma: float, rng: random.Random) -> float:
 
 
 def _sample_mixing_mu(mu: float, rng: random.Random) -> float:
-    """Genera la mezcla de comunidades alrededor de mu global, en [0.05, 0.95]."""
+    """Genera la mezcla de comunidades alrededor del ``mu`` global usando una distribución Beta.
+
+    Args:
+        mu: Coeficiente de mezcla LFR global; actúa como media de la distribución Beta.
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Valor de mezcla por nodo acotado en ``[0.05, 0.95]``, redondeado a 3 decimales.
+    """
     concentration = 18.0
     a = max(mu * concentration, 0.1)
     b = max((1.0 - mu) * concentration, 0.1)

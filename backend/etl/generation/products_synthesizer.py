@@ -1,3 +1,10 @@
+"""Sintetizador de productos correlacionados con proveedores e industria.
+
+Genera ``products.csv`` asignando a cada proveedor un catálogo de productos
+proporcional a su peso en la red (``baseline_revenue``, ``out_degree``,
+``agreed_volume_total``).  La categoría de cada producto se elige según
+probabilidades previas por código NACE definidas en ``INDUSTRY_CATEGORY_PRIORS``.
+"""
 from __future__ import annotations
 
 import argparse
@@ -124,6 +131,15 @@ CRITICALITY_LEVELS = ["LOW", "MEDIUM", "HIGH"]
 
 
 def _pick(row: dict[str, str], *keys: str) -> str | None:
+    """Devuelve el primer valor no nulo encontrado en el dict para las claves dadas.
+
+    Args:
+        row: Fila del CSV como diccionario ``{header: value}``.
+        *keys: Claves a probar en orden de prioridad.
+
+    Returns:
+        Valor de la primera clave encontrada, o ``None`` si ninguna existe.
+    """
     for key in keys:
         if key in row and row[key] is not None:
             return row[key]
@@ -131,6 +147,16 @@ def _pick(row: dict[str, str], *keys: str) -> str | None:
 
 @dataclass(frozen=True)
 class SupplierProfile:
+    """Perfil de proveedor enriquecido con métricas de red para la síntesis de productos.
+
+    Attributes:
+        company_id: Identificador único del proveedor.
+        industry_code: Código NACE de la industria.
+        baseline_revenue: Ingresos anuales base en euros.
+        out_degree: Número de compradores a los que suministra (aristas salientes).
+        agreed_volume_total: Volumen contractual total acordado en euros.
+    """
+
     company_id: str
     industry_code: str
     baseline_revenue: float
@@ -153,8 +179,26 @@ def get_products_parser() -> argparse.ArgumentParser:
 # FUNCION PRINCIPAL (MAIN)
 # =============================================================================
 def synthesize_products_csv(output_file: Path, companies_csv: Path, rel_supplies_csv: Path,
-                                        avg_degree_products: int, seed: int) -> Path:
-    """Genera products.csv correlacionando el catalogo con suppliers e industry_code."""
+                            avg_degree_products: int, seed: int) -> Path:
+    """Genera products.csv correlacionando el catálogo con proveedores e industria.
+
+    El número total de productos es ``len(suppliers) × avg_degree_products``.
+    La categoría de cada producto se elige según ``INDUSTRY_CATEGORY_PRIORS``.
+
+    Args:
+        output_file: Ruta del fichero CSV de salida.
+        companies_csv: Ruta al CSV de empresas generado previamente.
+        rel_supplies_csv: Ruta al CSV de suministros generado previamente.
+        avg_degree_products: Número medio de productos por proveedor.
+        seed: Semilla para reproducibilidad.
+
+    Returns:
+        Ruta al fichero CSV escrito.
+
+    Raises:
+        ValueError: Si ``avg_degree_products <= 0`` o no hay proveedores válidos.
+        FileNotFoundError: Si ``companies_csv`` o ``rel_supplies_csv`` no existen.
+    """
     if avg_degree_products <= 0:
         raise ValueError("avg-degree-products debe ser > 0")
 
@@ -228,7 +272,19 @@ def synthesize_products_csv(output_file: Path, companies_csv: Path, rel_supplies
 # FUNCIONES AUXILIARES (Helpers / Utils)
 # =============================================================================
 def _load_supplier_profiles(companies_csv: Path, rel_supplies_csv: Path, rng: random.Random) -> list[SupplierProfile]:
-    """Carga y correlaciona datos de companies.csv y rel_supplies.csv para construir perfiles de proveedores."""
+    """Carga y correlaciona datos de companies.csv y rel_supplies.csv para construir perfiles de proveedores.
+
+    Args:
+        companies_csv: Ruta al CSV de empresas generado por ``synthesize_companies_csv``.
+        rel_supplies_csv: Ruta al CSV de suministros generado por ``synthesize_rel_supplies_csv``.
+        rng: Generador aleatorio inicializado con la semilla global (reservado para extensiones futuras).
+
+    Returns:
+        Lista de ``SupplierProfile`` con grado de salida y volumen acordado agregados desde SUPPLIES.
+
+    Raises:
+        FileNotFoundError: Si alguno de los dos CSV no existe.
+    """
     if not companies_csv.exists():
         raise FileNotFoundError(f"No existe companies.csv: {companies_csv}")
     if not rel_supplies_csv.exists():
@@ -277,7 +333,14 @@ def _load_supplier_profiles(companies_csv: Path, rel_supplies_csv: Path, rng: ra
 
 
 def _supplier_weight(supplier: SupplierProfile) -> float:
-    """Calcula un peso para la seleccion de proveedores basado en revenue, mas conexiones y volumen acordado."""
+    """Calcula un peso de selección de proveedores basado en revenue, conexiones y volumen acordado.
+
+    Args:
+        supplier: Perfil del proveedor con métricas de red enriquecidas.
+
+    Returns:
+        Peso positivo para muestreo ponderado; mínimo 1.0.
+    """
     return max(
         (math.sqrt(supplier.baseline_revenue) * 0.35)
         + ((supplier.out_degree + 1) ** 1.10)
@@ -287,7 +350,15 @@ def _supplier_weight(supplier: SupplierProfile) -> float:
 
 
 def _choose_category_by_industry(industry_code: str, rng: random.Random) -> str:
-    """Selecciona una categoria de producto basada en el codigo de industria del proveedor."""
+    """Selecciona una categoría de producto basada en el código de industria del proveedor.
+
+    Args:
+        industry_code: Código NACE del proveedor (p. ej. ``C25``, ``G46``).
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Clave de categoría de ``PRODUCT_CATEGORIES`` (p. ej. ``components``, ``packaging``).
+    """
     priors = INDUSTRY_CATEGORY_PRIORS.get(industry_code)
     categories = list(priors.keys())
     weights = list(priors.values())
@@ -295,7 +366,17 @@ def _choose_category_by_industry(industry_code: str, rng: random.Random) -> str:
 
 
 def _generate_unique_sku(category_key: str, industry_code: str, rng: random.Random, used_skus: set[str]) -> str:
-    """Genera un SKU unico combinando prefijos de categoria e industria con numeros aleatorios, evitando colisiones."""
+    """Genera un SKU único combinando prefijos de categoría e industria con números aleatorios.
+
+    Args:
+        category_key: Clave de categoría (p. ej. ``components``).
+        industry_code: Código NACE del proveedor (p. ej. ``C25``).
+        rng: Generador aleatorio inicializado con la semilla global.
+        used_skus: Conjunto de SKUs ya asignados en esta ejecución; se actualiza en el lugar.
+
+    Returns:
+        Cadena SKU única con formato ``{industry_prefix}{category_prefix}-{NNNN}-{NN}``.
+    """
     prefix = f"{industry_code[:2]}{category_key[:2]}".upper()
     for _ in range(100):
         candidate = f"{prefix}-{rng.randint(1000, 9999)}-{rng.randint(10, 99)}"
@@ -310,7 +391,16 @@ def _generate_unique_sku(category_key: str, industry_code: str, rng: random.Rand
 
 
 def _generate_hs_code(category_cfg: dict[str, object], industry_code: str, rng: random.Random) -> str:
-    """Genera un codigo HS aleatorio basado en los prefijos asociados a la categoria del producto."""
+    """Genera un código HS aleatorio basado en los prefijos asociados a la categoría del producto.
+
+    Args:
+        category_cfg: Configuración de la categoría desde ``PRODUCT_CATEGORIES``.
+        industry_code: Código NACE del proveedor, estabiliza el pool de sufijos con su propio RNG.
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Código HS de 6 dígitos como cadena (p. ej. ``847523``).
+    """
     hs_prefix = rng.choice(category_cfg["hs_prefixes"])
     pool_rng = random.Random(f"{hs_prefix}_{industry_code}_v1")
     
@@ -325,7 +415,17 @@ def _generate_hs_code(category_cfg: dict[str, object], industry_code: str, rng: 
 
 
 def _generate_name(category_cfg: dict[str, object], industry_code: str, hs_code: str, rng: random.Random) -> str:
-    """Genera un nombre de producto combinando un adjetivo, un sustantivo de la categoria, y codigos de industria y familia."""
+    """Genera un nombre de producto combinando adjetivo, sustantivo de categoría y códigos de industria.
+
+    Args:
+        category_cfg: Configuración de la categoría desde ``PRODUCT_CATEGORIES``.
+        industry_code: Código NACE del proveedor (incluido como prefijo en el nombre).
+        hs_code: Código HS asignado al producto; los dos últimos dígitos forman la familia.
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Nombre del producto como cadena (p. ej. ``"Precision Valve C25-23"``).
+    """
     adjective = rng.choice(ADJECTIVES)
     noun = rng.choice(category_cfg["nouns"])
     family = hs_code[-2:] if hs_code and len(hs_code) >= 2 else f"{rng.randint(10, 99):02d}"
@@ -334,7 +434,15 @@ def _generate_name(category_cfg: dict[str, object], industry_code: str, hs_code:
 
 
 def _pick_unit(category_cfg: dict[str, object], rng: random.Random) -> str:
-    """Selecciona una unidad de medida para el producto de la lista disponible, o la unidad por defecto."""
+    """Selecciona la unidad de medida del producto de la lista disponible en la categoría.
+
+    Args:
+        category_cfg: Configuración de la categoría desde ``PRODUCT_CATEGORIES``.
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Cadena de unidad (p. ej. ``"kg"``, ``"unit"``, ``"hour"``).
+    """
     units = category_cfg.get("units")
     if isinstance(units, list) and units:
         return str(rng.choice(units))
@@ -342,7 +450,16 @@ def _pick_unit(category_cfg: dict[str, object], rng: random.Random) -> str:
 
 
 def _lead_time_from_criticality(category_cfg: dict[str, object], criticality: str, rng: random.Random) -> int:
-    """Calcula un tiempo de entrega base para el producto basado en su categoria y nivel de criticidad."""
+    """Calcula el tiempo de entrega base en días según categoría y criticidad del producto.
+
+    Args:
+        category_cfg: Configuración de la categoría desde ``PRODUCT_CATEGORIES``.
+        criticality: Nivel de criticidad del producto (``LOW``, ``MEDIUM`` o ``HIGH``).
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Número entero de días de lead time, mínimo 0.
+    """
     min_days, max_days = category_cfg["lead_time_range"]
     base = rng.randint(min_days, max_days)
     variance = float(category_cfg.get("lead_time_variance", 0.0))
@@ -362,7 +479,16 @@ def _lead_time_from_criticality(category_cfg: dict[str, object], criticality: st
 
 
 def _price_for_category(category_cfg: dict[str, object], criticality: str, rng: random.Random) -> float:
-    """Calcula un precio base para el producto basado en su categoria y nivel de criticidad."""
+    """Calcula el precio base del producto según categoría y criticidad, con ruido de volatilidad.
+
+    Args:
+        category_cfg: Configuración de la categoría desde ``PRODUCT_CATEGORIES``.
+        criticality: Nivel de criticidad del producto (``LOW``, ``MEDIUM`` o ``HIGH``).
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Precio base en euros, redondeado a 2 decimales, mínimo 0.01.
+    """
     low, high = category_cfg["price_range"]
     price = rng.uniform(low, high)
     volatility = float(category_cfg.get("price_volatility", 0.0))
@@ -381,7 +507,17 @@ def _price_for_category(category_cfg: dict[str, object], criticality: str, rng: 
 
 
 def _is_substitutable(category_cfg: dict[str, object], criticality: str, rng: random.Random) -> bool:
-    """Determina si un producto es sustituible basado en la probabilidad base de su categoria y su criticidad."""
+    """Determina si un producto es sustituible según la probabilidad base de su categoría y criticidad.
+
+    Args:
+        category_cfg: Configuración de la categoría desde ``PRODUCT_CATEGORIES``.
+        criticality: Nivel de criticidad del producto (``LOW``, ``MEDIUM`` o ``HIGH``);
+            ``HIGH`` reduce la probabilidad de sustitución un 30 %.
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        ``True`` si el producto puede ser reemplazado por otro equivalente.
+    """
     base_prob = float(category_cfg["substitutable_prob"])
     if criticality == "HIGH":
         base_prob *= 0.70

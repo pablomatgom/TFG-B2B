@@ -142,7 +142,38 @@ class ScoringMixin:
     """Scoring compuesto de riesgo proveedor, fragilidad de comprador y perfil contractual."""
 
     def get_buyer_supplier_recommendations(self, buyer_name: str) -> pd.DataFrame:
-        """Recomienda nuevos proveedores para un comprador basándose en coincidencia de categorías y proximidad sectorial/geográfica."""
+        """Recomienda nuevos proveedores para un comprador basándose en coincidencia de categorías y proximidad.
+
+        Identifica candidatos potenciales bajo dos criterios complementarios:
+
+        - **Coincidencia de categoría**: proveedores que venden categorías de producto que el
+          comprador ya aprovisiona con sus proveedores actuales.
+        - **Proximidad sectorial/geográfica**: proveedores que ya abastecen a compradores
+          de la misma región o sector que el comprador objetivo.
+
+        Args:
+            buyer_name: Razón social exacta del comprador (``Company.legal_name``).
+
+        Returns:
+            DataFrame con hasta 20 candidatos, ordenado por ``avg_reliability DESC`` y
+            ``supply_degree DESC``, con las columnas:
+
+                | Columna | Tipo | Descripción |
+                |---|---|---|
+                | ``supplier`` | str | Razón social del proveedor candidato |
+                | ``region`` | str | Comunidad Autónoma del proveedor |
+                | ``size_band`` | str | Categoría de tamaño (micro / pyme / mid / enterprise) |
+                | ``industry_code`` | str | Código NACE del proveedor |
+                | ``supply_degree`` | int | Número total de relaciones ``SUPPLIES`` activas |
+                | ``avg_reliability`` | float | Fiabilidad media contractual (0–1) |
+                | ``cat_overlap`` | int | Nº de categorías de producto coincidentes |
+                | ``proximity_count`` | int | Nº de compradores próximos ya abastecidos |
+
+        Note:
+            Un proveedor aparece en el resultado si cumple al menos uno de los dos criterios
+            (``cat_overlap > 0 OR proximity_count > 0``). Los proveedores que ya abastecen
+            directamente al comprador quedan excluidos.
+        """
         return pd.DataFrame(self._fetch_data(_Q_BUYER_SUPPLIER_RECOMMENDATIONS, buyer_name=buyer_name))
 
     def get_supplier_contracts(self, supplier_name: str) -> pd.DataFrame:
@@ -163,7 +194,7 @@ class ScoringMixin:
                 | ``reliability_score`` | float | Fiabilidad contractual individual (0–1) |
                 | ``payment_terms_days`` | int | Plazo de pago acordado (días) |
                 | ``agreed_volume_eur`` | float | Volumen de suministro acordado (€) |
-                | ``since_date`` | str | Fecha de inicio del contrato (ISO 8601) |
+                | ``since_date`` | str | Fecha de inicio del contrato |
         """
         return pd.DataFrame(self._fetch_data(_Q_SUPPLIER_CONTRACTS, supplier_name=supplier_name))
 

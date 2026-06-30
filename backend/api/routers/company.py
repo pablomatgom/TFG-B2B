@@ -22,7 +22,20 @@ settings = load_settings()
 def get_my_company(
     current_user: User = Depends(get_current_user),
     analyzer: B2BGraphAnalyzer = Depends(get_analyzer_instance),
-):
+) -> dict:
+    """Devuelve el nodo ``Company`` en Neo4j asociado al usuario autenticado.
+
+    Args:
+        current_user: Usuario resuelto por ``Depends(get_current_user)`` a partir del JWT.
+        analyzer: Sesión ``B2BGraphAnalyzer`` inyectada por ``Depends(get_analyzer_instance)``.
+
+    Returns:
+        Todas las propiedades del nodo ``Company`` devueltos desde Neo4j.
+
+    Raises:
+        HTTPException: 401 si el token es inválido.
+        HTTPException: 404 si no existe un nodo ``Company`` con el ``company_id`` del usuario.
+    """
     with analyzer._driver.session(database=settings.neo4j_database) as session:
         rec = session.run(
             "MATCH (c:Company {company_id: $cid}) RETURN c",
@@ -38,7 +51,27 @@ def update_my_company(
     body: CompanyProfileUpdate,
     current_user: User = Depends(get_current_user),
     analyzer: B2BGraphAnalyzer = Depends(get_analyzer_instance),
-):
+) -> dict:
+    """Actualiza parcialmente el perfil de la empresa del usuario autenticado.
+
+    Solo los campos opcionales de ``body`` se modifican en Neo4j. 
+    Los campos no incluidos en la petición permanecen sin cambios.
+
+    Args:
+        body: Campos a actualizar (todos opcionales).
+        current_user: Usuario autenticado que realiza la petición.
+        analyzer: Instancia del analizador con conexión activa a Neo4j.
+
+    Returns:
+        ``{"document_id": ..., "status": ...}`` con el valor actualizado.
+
+    Raises:
+        HTTPException: 400 si el body no contiene ningún campo a actualizar.
+        HTTPException: 404 si el nodo ``Company`` no existe en Neo4j.
+    
+    Note:
+        Sin conexión al frontend. Previsto para desarrollos futuros.
+    """
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
     if not updates:
         raise HTTPException(status_code=400, detail="No hay campos a actualizar")
@@ -55,7 +88,24 @@ def update_my_company(
 def get_my_documents(
     current_user: User = Depends(get_current_user),
     analyzer: B2BGraphAnalyzer = Depends(get_analyzer_instance),
-):
+) -> list[dict]:
+    """Lista los últimos 200 documentos EDI emitidos por la empresa del usuario.
+
+    Ejecuta una consulta Cypher en tiempo real y serializa los resultados en JSON.
+
+    Args:
+        current_user: Usuario resuelto por ``Depends(get_current_user)`` a partir del JWT.
+        analyzer: Sesión ``B2BGraphAnalyzer`` inyectada por ``Depends(get_analyzer_instance)``.
+
+    Returns:
+        Documentos ordenados por ``issue_date`` descendente con campos: 
+            ``document_id``, ``doc_type``, ``status``, ``issue_date``,
+            ``due_date``, ``gross_amount``, ``total_amount``, ``currency``,
+            ``discrepancy_flag``, ``payment_terms_days``, ``contract_type``.
+
+    Raises:
+        HTTPException: 401 si el token es inválido.
+    """
     with analyzer._driver.session(database=settings.neo4j_database) as session:
         records = session.run(
             """
@@ -96,7 +146,27 @@ def update_document_status(
     body: DocumentStatusUpdate,
     current_user: User = Depends(get_current_user),
     analyzer: B2BGraphAnalyzer = Depends(get_analyzer_instance),
-):
+) -> dict:
+    """Actualiza el estado de un documento EDI propiedad de la empresa del usuario.
+
+    La consulta a Neo4j incluye una validación de seguridad integrada para asegurar 
+    que el usuario no pueda modificar documentos pertenecientes a otras empresas.
+
+    Args:
+        doc_id: Identificador único del documento (``document_id`` en Neo4j).
+        body: Nuevo estado a aplicar; validado por ``DocumentStatusUpdate``.
+        current_user: Usuario autenticado que realiza la petición.
+        analyzer: Instancia del analizador con conexión activa a Neo4j.
+
+    Returns:
+        ``{"document_id": ..., "status": ...}`` con el valor actualizado.
+
+    Raises:
+        HTTPException: 403 si el documento no existe o pertenece a otra empresa.
+        
+    Note:
+        Sin conexión al frontend. Previsto para desarrollos futuros.
+    """
     with analyzer._driver.session(database=analyzer._database) as session:
         rec = session.run(
             """

@@ -104,6 +104,13 @@ services:
           memory: 256M
     restart: unless-stopped
 
+  docs:
+    image: squidfunk/mkdocs-material
+    container_name: tfg-docs
+    volumes:
+      - .:/docs
+    restart: unless-stopped
+
   nginx:
     image: nginx:alpine
     container_name: tfg-nginx
@@ -118,6 +125,8 @@ services:
         condition: service_started
       backend:
         condition: service_healthy
+      docs:
+        condition: service_started
     deploy:
       resources:
         limits:

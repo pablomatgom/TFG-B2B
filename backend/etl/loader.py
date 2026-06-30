@@ -1,3 +1,15 @@
+"""Cargador masivo de datos CSV en Neo4j para el pipeline ETL del proyecto B2B.
+
+Expone dos clases principales:
+
+- :class:`LoadStats`: estadísticas de rendimiento de una carga individual (inmutable).
+- :class:`Neo4jBulkLoader`: orquesta la carga de los cinco CSVs sintéticos en orden
+  garantizado, creando constraints, índices y verificando la conectividad.
+
+La carga se realiza por lotes (``batch_size`` configurable) para evitar presión de
+memoria en grafos grandes.  Todos los métodos de escritura usan transacciones
+explícitas de Neo4j (``execute_write``) para garantizar atomicidad por lote.
+"""
 from __future__ import annotations
 
 import csv
@@ -12,9 +24,18 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
 
-# --- CLASES Y FUNCIONES PARA CARGA MASIVA DE DATOS EN NEO4J ---
 @dataclass(frozen=True)
 class LoadStats:
+    """Estadísticas de rendimiento de la carga de un dataset individual.
+
+    Attributes:
+        dataset: Nombre del fichero CSV cargado.
+        file_path: Ruta absoluta al fichero en disco.
+        rows: Número total de filas procesadas.
+        batches: Número de lotes enviados a Neo4j.
+        elapsed_seconds: Tiempo total de carga en segundos.
+    """
+
     dataset: str
     file_path: str
     rows: int
@@ -23,13 +44,31 @@ class LoadStats:
 
     @property
     def rows_per_second(self) -> float:
+        """Rendimiento de la carga en filas por segundo.
+
+        Returns:
+            ``rows / elapsed_seconds``, si ``elapsed_seconds`` ≤ 0 devuelve
+                ``float(rows)`` como cota superior.
+        """
         if self.elapsed_seconds <= 0:
             return float(self.rows)
         return self.rows / self.elapsed_seconds
 
 
 class Neo4jBulkLoader:
-    """Carga masiva por lotes para nodos y relaciones del modelo B2B."""
+    """Carga masiva por lotes para nodos y relaciones del modelo B2B.
+
+    Implementa el protocolo de contexto (``__enter__`` / ``__exit__``) para
+    garantizar el cierre del driver Neo4j aunque se produzca una excepción.
+
+    Attributes:
+        CONSTRAINTS_AND_INDEXES: Lista de sentencias Cypher DDL que crean las
+            cuatro restricciones de unicidad y los nueve índices del esquema.
+        LOAD_QUERIES: Diccionario ``{nombre_csv: cypher}`` con las sentencias
+            ``UNWIND $rows … CREATE/MERGE`` para cada uno de los cinco datasets.
+        REQUIRED_DATASETS: Tupla con los nombres de CSV en el **orden de carga
+            obligatorio** (Companies → Supplies → Products → Documents → Contains).
+    """
 
     CONSTRAINTS_AND_INDEXES = [    
         # --- RESTRICCIONES DE UNICIDAD (Para MERGE rápido) ---
@@ -171,9 +210,17 @@ class Neo4jBulkLoader:
 
     REQUIRED_DATASETS = ("companies.csv", "rel_supplies.csv", "products.csv", "documents.csv", "rel_contains.csv")
 
-    def __init__(self, neo4j_uri: str, neo4j_user: str, neo4j_password: str, 
-                 neo4j_database: str, batch_size: int,) -> None:
-        """Inicialización del loader con parámetros de conexión y configuración."""
+    def __init__(self, neo4j_uri: str, neo4j_user: str, neo4j_password: str,
+                 neo4j_database: str, batch_size: int) -> None:
+        """Inicializa el driver Neo4j y configura el tamaño de lote.
+
+        Args:
+            neo4j_uri: URI Bolt del servidor.
+            neo4j_user: Nombre de usuario Neo4j.
+            neo4j_password: Contraseña Neo4j.
+            neo4j_database: Base de datos de destino.
+            batch_size: Filas por lote, se fuerza a ≥ 1.
+        """
         self.neo4j_database = neo4j_database
         self.batch_size = max(batch_size, 1)
         self._driver: Driver = GraphDatabase.driver(
@@ -182,23 +229,34 @@ class Neo4jBulkLoader:
         )
 
     def close(self) -> None:
-        """ Cierre de la conexión al driver de Neo4j y liberar recursos"""
+        """Cierra el driver Neo4j y libera los recursos de red."""
         self._driver.close()
 
     def __enter__(self) -> "Neo4jBulkLoader":
-        """ Permite usar el loader como un contexto (with statement) para asegurar el cierre correcto de recursos."""
+        """Permite usar el loader como gestor de contexto (``with`` statement)."""
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
-        """ Cierre automático del driver al salir del contexto, incluso si ocurre una excepción."""
+        """Cierra automáticamente el driver al salir del contexto."""
         self.close()
 
     def verify_connection(self) -> None:
-        """ Verificación de la conectividad con la base de datos Neo4j, lanzando una excepción si no se puede conectar."""
+        """Verifica la conectividad con Neo4j antes de iniciar la carga.
+
+        Raises:
+            ServiceUnavailable: Si el servidor no está accesible en la URI configurada.
+        """
         self._driver.verify_connectivity()
         
     def clear_database(self) -> None:
-        """Elimina todos los nodos y relaciones de la base de datos de forma segura por lotes."""
+        """Elimina todos los nodos y relaciones de la base de datos en lotes.
+
+        Usa ``DETACH DELETE`` en transacciones de ``batch_size`` filas para evitar
+        timeouts en grafos grandes.
+
+        Raises:
+            Exception: Relanza cualquier error de Neo4j tras registrarlo en el log.
+        """
         logging.info(f"Iniciando borrado completo de la base de datos en lotes de {self.batch_size} nodos...")
         query = f"""
             MATCH (n)
@@ -216,12 +274,31 @@ class Neo4jBulkLoader:
             raise e
 
     def create_constraints_and_indexes(self) -> None:
+        """Crea las restricciones de unicidad e índices definidos en ``CONSTRAINTS_AND_INDEXES``.
+
+        Usa ``IF NOT EXISTS`` en cada sentencia para que se pueda ejecutar
+        varias veces sin errores aunque los constraints ya existan.
+        """
         logging.info("Creando constraints e índices en Neo4j...")
         with self._driver.session(database=self.neo4j_database) as session:
             for query in self.CONSTRAINTS_AND_INDEXES:
                 session.run(query).consume()
 
     def load_from_directory(self, csv_dir: Path) -> dict[str, Any]:
+        """Carga de los datasets CSV en orden garantizado desde un directorio.
+
+        Itera ``REQUIRED_DATASETS`` en orden (Companies → Supplies → Products →
+        Documents → Contains) para respetar las dependencias implícitas del grafo.
+        Los ficheros ausentes se saltan con un ``WARNING``.
+
+        Args:
+            csv_dir: Directorio que contiene los ficheros CSV sintéticos.
+
+        Returns:
+            Resumen de la carga con claves ``datasets_loaded``, ``total_rows``,
+                ``total_elapsed_seconds``, ``global_rows_per_second`` y
+                ``per_dataset`` (lista con métricas por fichero).
+        """
         per_dataset: list[dict[str, Any]] = []
         total_rows = 0
         total_seconds = 0.0
@@ -255,6 +332,15 @@ class Neo4jBulkLoader:
         }
 
     def _load_csv_dataset(self, dataset_name: str, file_path: Path) -> LoadStats:
+        """Carga un único fichero CSV en Neo4j procesándolo por lotes.
+
+        Args:
+            dataset_name: Clave en ``LOAD_QUERIES``.
+            file_path: Ruta absoluta al fichero CSV.
+
+        Returns:
+            Estadísticas de rendimiento de la carga.
+        """
         query = self.LOAD_QUERIES[dataset_name]
         started = time.perf_counter()
         rows = 0
@@ -273,11 +359,29 @@ class Neo4jBulkLoader:
 
     @staticmethod
     def _write_batch(tx: Any, query: str, rows: list[dict[str, str | None]]) -> None:
+        """Ejecuta la query Cypher con el lote de filas dentro de un contexto.
+
+        Args:
+            tx: Contexto de transacción Neo4j proporcionado por ``execute_write``.
+            query: Sentencia Cypher con parámetro ``$rows``.
+            rows: Lista de diccionarios ``{columna: valor}`` del lote actual.
+        """
         tx.run(query, rows=rows).consume()
 
     @staticmethod
     def _clean_key(key: str) -> str:
-        """Limpia los sufijos de Neo4j admin (ej. 'company_id:ID(Company)' -> 'company_id')"""
+        """Normaliza una cabecera CSV eliminando sufijos del formato de Neo4j.
+
+        Convierte cabeceras como ``company_id:ID(Company)`` en ``company_id`` y
+        resuelve los alias especiales de aristas (``':START_ID(Company)'``, etc.)
+        a nombres semánticos usados en las queries Cypher.
+
+        Args:
+            key: Cabecera CSV original del fichero sintético.
+
+        Returns:
+            Nombre de campo limpio listo para usarse como clave en ``$rows``.
+        """
         if not key:
             return ""
 
@@ -297,6 +401,18 @@ class Neo4jBulkLoader:
         return key.split(":")[0]
 
     def _iter_csv_batches(self, file_path: Path) -> Iterator[list[dict[str, str | None]]]:
+        """Genera lotes de filas desde un fichero CSV normalizando las cabeceras.
+
+        Aplica ``_clean_key`` a cada cabecera para eliminar sufijos. 
+        Los valores vacíos se convierten en ``None`` para que Neo4j los
+        reciba como ``null`` en las expresiones ``coalesce``.
+
+        Args:
+            file_path: Ruta al fichero CSV a leer.
+
+        Yields:
+            list[dict[str, str | None]]: Lote de hasta ``batch_size`` filas.
+        """
         batch: list[dict[str, str | None]] = []
         with file_path.open("r", encoding="utf-8", newline="") as csv_file:
             reader = csv.DictReader(csv_file)

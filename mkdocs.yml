@@ -1,0 +1,110 @@
+site_name: "B2B Graph Intel - Manual del Desarrollador"
+site_description: "Documentación técnica del sistema completo: frontend Next.js, backend FastAPI, pipeline ETL y algoritmos de grafos (GDS)."
+
+theme:
+  name: material
+  palette:
+    # Configuración de tema oscuro (Slate) ideal para desarrolladores
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: Cambiar a tema claro
+    # Opción de tema claro por si el tribunal prefiere leerlo en blanco
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: Cambiar a tema oscuro
+  
+  # Características de interfaz avanzadas para mejorar la UX
+  features:
+    - navigation.top           # Botón flotante para volver arriba
+    - search.suggest           # Autocompletado inteligente en la barra de búsqueda
+    - search.highlight         # Resalta las palabras buscadas dentro de los textos
+    - content.code.copy        # Añade un botón interactivo para copiar bloques de código
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            show_source: true         # Permite desplegar el código fuente original desde la web
+            heading_level: 3          # Mantiene los métodos en una jerarquía visual limpia (H3)
+            docstring_style: google   # Fuerza el estándar de Google para procesar 'Returns:' perfectamente
+            show_root_heading: true   # Muestra el nombre de la clase base como título principal
+            filters: ["!^__"]         # Muestra métodos privados (_run_gds) pero oculta dunder (__init__, etc.)
+
+markdown_extensions:
+  # Extensión necesaria para habilitar fórmulas matemáticas en LaTeX
+  - pymdownx.arithmatex:
+      generic: true
+  # Extensiones para mejorar el resaltado de sintaxis del código de Python/Cypher
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+extra_css:
+  - stylesheets/extra.css
+
+# Scripts externos para el renderizado de ecuaciones (MathJax) y diagramas (Mermaid)
+extra_javascript:
+  - https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-mml-chtml.js
+  - https://unpkg.com/mermaid@11/dist/mermaid.min.js
+
+# Estructura de navegación del sitio web
+nav:
+  - 'Inicio': index.md
+  - 'Backend':
+      - 'Núcleo':
+          - 'Configuración y Utilidades': backend/core/config.md
+      - 'API':
+          - 'Aplicación y CORS': backend/api/core.md
+          - 'Modelos': backend/api/models.md
+          - 'Routers': backend/api/routers.md
+          - 'API Interactiva (Swagger)': 'https://b2b-graph-intelligence.duckdns.org/swagger'
+      - 'Pipeline ETL':
+          - 'Runners': backend/etl/runners.md
+          - 'Sintetizadores':
+              - 'Visión General': backend/etl/generation/overview.md
+              - 'Empresas': backend/etl/generation/companies.md
+              - 'Suministros': backend/etl/generation/supplies.md
+              - 'Productos': backend/etl/generation/products.md
+              - 'Documentos': backend/etl/generation/documents.md
+              - 'Líneas de Documento': backend/etl/generation/contains.md
+          - 'Cargador Neo4j': backend/etl/loader.md
+          - 'Analítica':
+              - 'Visión General': backend/etl/analytics/overview.md
+              - 'Arquitectura Interna': backend/etl/analytics/architecture.md
+              - 'Métricas Macroscópicas': backend/etl/analytics/macro.md
+              - 'Analítica de Grafos (GDS)': backend/etl/analytics/gds.md
+              - 'Trazabilidad Documental': backend/etl/analytics/traceability.md
+              - 'Análisis de Riesgos': backend/etl/analytics/risk.md
+      - 'Autenticación':
+          - 'Auth (SQLite)': backend/infrastructure/auth_db.md
+  - 'Frontend':
+      - 'Visión General': frontend/overview.md
+      - 'Arquitectura de Datos':
+          - 'Contratos de API': frontend/types.md
+          - 'Gestión de Estado': frontend/state.md
+      - 'Interfaz y Navegación':
+          - 'Rutas y Páginas': frontend/pages.md
+          - 'Inventario de Componentes': frontend/components.md
+      - 'Lógica de Cliente':
+          - 'Hooks y Contexto': frontend/hooks.md
+  - 'Base de Datos':
+      - 'Consultas Cypher': database/cypher-queries.md
+  - 'Despliegue':
+      - 'Checklist de Servidor': deployment/checklist.md
+      - 'Operaciones en Producción': deployment/operations.md

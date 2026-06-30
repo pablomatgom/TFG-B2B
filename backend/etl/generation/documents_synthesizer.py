@@ -1,9 +1,17 @@
+"""Sintetizador de documentos EDI con historial temporal y trazabilidad.
+
+Genera ``documents.csv`` en modo streaming (O(1) memoria): para cada par
+proveedor-comprador del grafo emite triplets de documentos
+(ORDER → DESADV → INVOICE) distribuidos a lo largo del periodo de actividad
+del contrato con sesgo estacional mensual definido en ``MONTH_WEIGHTS``.
+"""
 from __future__ import annotations
 
 import argparse
 import csv
 import logging
 import random
+from collections.abc import Generator
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, UTC
 from pathlib import Path
@@ -30,13 +38,36 @@ INDUSTRY_TAX_RATES: dict[str, list[float]] = {
 
 @dataclass(frozen=True)
 class CompanyProfile:
+    """Perfil mínimo de empresa necesario para la síntesis de documentos.
+
+    Attributes:
+        company_id: Identificador único de la empresa.
+        country: Código del país.
+        industry_code: Código NACE (determina el tipo de IVA aplicable).
+        baseline_revenue: Ingresos anuales base en euros.
+    """
+
     company_id: str
     country: str
     industry_code: str
     baseline_revenue: float
 
+
 @dataclass(frozen=True)
 class CompanyPair:
+    """Contrato de suministro entre un proveedor y un comprador.
+
+    Attributes:
+        supplier_company_id: ID del proveedor.
+        buyer_company_id: ID del comprador.
+        lead_time_days: Plazo de entrega acordado en días.
+        reliability_score: Fiabilidad del proveedor entre [0, 1].
+        agreed_volume_baseline: Volumen contractual anual en euros.
+        contract_type: Tipo de contrato: ``FRAME``, ``SPOT``, ``ANNUAL`` o ``MULTIYEAR``.
+        payment_terms_days: Días de pago acordados.
+        since_date: Fecha de inicio de la relación comercial.
+    """
+
     supplier_company_id: str
     buyer_company_id: str
     lead_time_days: int
@@ -63,7 +94,26 @@ def get_documents_parser() -> argparse.ArgumentParser:
 # =============================================================================
 def synthesize_documents_csv(output_file: Path, companies_csv: Path, rel_supplies_csv: Path,
                              seed: int, avg_out_degree: int) -> Path:
-    """Genera documents.csv abarcando todo el historial usando un generador."""
+    """Genera documents.csv en modo streaming, emitiendo las tripletas ORDER→DESADV→INVOICE.
+
+    Para cada par proveedor-comprador distribuye documentos a lo largo del
+    periodo de actividad del contrato con sesgo estacional mensual
+    (``MONTH_WEIGHTS``).  El generador ``_document_stream_generator`` asegura
+    uso de memoria O(1) independientemente del tamaño del grafo.
+
+    Args:
+        output_file: Ruta del fichero CSV de salida.
+        companies_csv: Ruta al CSV de empresas generado previamente.
+        rel_supplies_csv: Ruta al CSV de suministros generado previamente.
+        seed: Semilla para reproducibilidad.
+        avg_out_degree: Multiplicador de frecuencia de pedidos por contrato.
+
+    Returns:
+        Ruta al fichero CSV escrito.
+
+    Raises:
+        ValueError: Si ``avg_out_degree <= 0`` o no hay pares en rel_supplies.csv.
+    """
     if avg_out_degree <= 0:
         raise ValueError("avg_out_degree debe ser > 0")
 
@@ -92,7 +142,7 @@ def synthesize_documents_csv(output_file: Path, companies_csv: Path, rel_supplie
 
     # Control final
     if docs_generated == 0:
-        logging.warning("No se han generado documentos; revisa since_date en rel_supplies.csv")
+        logging.warning("No se han generado documentos, revisa since_date en rel_supplies.csv")
     else:
         # Opcional: Un log para que veas en consola cuántos se generaron
         logging.info(f"Éxito: Se han generado {docs_generated} documentos en modo streaming.")
@@ -104,7 +154,17 @@ def synthesize_documents_csv(output_file: Path, companies_csv: Path, rel_supplie
 #  LÓGICA DE ALTO NIVEL (Cargas y Generadores Complejos)
 # =============================================================================
 def _load_company_profiles(companies_csv: Path) -> dict[str, CompanyProfile]:
-    """Carga de perfiles de empresa desde companies.csv."""
+    """Carga los perfiles mínimos de empresa necesarios para la síntesis de documentos.
+
+    Args:
+        companies_csv: Ruta al CSV de empresas generado por ``synthesize_companies_csv``.
+
+    Returns:
+        Diccionario ``{company_id: CompanyProfile}`` con los perfiles de todas las empresas.
+
+    Raises:
+        FileNotFoundError: Si ``companies_csv`` no existe.
+    """
     if not companies_csv.exists():
         raise FileNotFoundError(f"No existe companies.csv: {companies_csv}")
 
@@ -125,7 +185,15 @@ def _load_company_profiles(companies_csv: Path) -> dict[str, CompanyProfile]:
 
 
 def _load_pairs_from_supplies(rel_supplies_csv: Path) -> list[CompanyPair]:
-    """Carga de contratos desde rel_supplies.csv."""
+    """Carga los contratos proveedor-comprador desde rel_supplies.csv.
+
+    Args:
+        rel_supplies_csv: Ruta al CSV de suministros generado por ``synthesize_rel_supplies_csv``.
+
+    Returns:
+        Lista de ``CompanyPair`` con los datos contractuales de cada relación SUPPLIES.
+        Devuelve lista vacía si el fichero no existe.
+    """
     if not rel_supplies_csv.exists():
         return []
 
@@ -153,9 +221,22 @@ def _load_pairs_from_supplies(rel_supplies_csv: Path) -> list[CompanyPair]:
     return pairs
 
 
-def _document_stream_generator(pairs: list[CompanyPair], company_profiles: dict[str, CompanyProfile], 
-                               rng: random.Random, avg_out_degree: int):
-    """Generador que emite documentos B2B de uno en uno."""
+def _document_stream_generator(pairs: list[CompanyPair], company_profiles: dict[str, CompanyProfile],
+                               rng: random.Random, avg_out_degree: int) -> Generator[dict, None, None]:
+    """Generador que emite filas de documento B2B de una en una (streaming).
+
+    Para cada par distribuye los pedidos en el tiempo con sesgo estacional
+    y emite las filas como dicts listos para ``csv.DictWriter``.
+
+    Args:
+        pairs: Lista de contratos proveedor-comprador.
+        company_profiles: Perfiles de empresa indexados por ``company_id``.
+        rng: Generador de números aleatorios con semilla.
+        avg_out_degree: Multiplicador de frecuencia de pedidos por contrato.
+
+    Yields:
+        dict: Fila de documento lista para escribir en ``documents.csv``.
+    """
     next_seq = 1
 
     for pair in pairs:
@@ -198,7 +279,31 @@ def _document_stream_generator(pairs: list[CompanyPair], company_profiles: dict[
 def _generate_triplet_records(base_seq: int, rng: random.Random, pair: CompanyPair,
                               supplier_profile: CompanyProfile, buyer_profile: CompanyProfile,
                               order_issue: date, order_gross: float) -> list[dict]:
-    """Generación de secuencia lógica de 3 documentos: Pedido -> Albarán -> Factura."""
+    """Genera la tripleta EDI de un ciclo comercial: ORDER → DESADV → INVOICE.
+
+    Los tres documentos comparten divisa, par proveedor-comprador y condiciones
+    contractuales. La cadena de trazabilidad se construye así:
+
+    - ``DESADV.reference_id = ORDER_ID``  →  DESADV → FULFILLS → ORDER (1 salto)
+    - ``INVOICE.reference_id = DESADV_ID`` →  INVOICE → FULFILLS → DESADV → FULFILLS → ORDER (2 saltos)
+
+    Los importes siguen la jerarquía ``delivery_gross = order_gross × fulfillment_ratio``
+    e ``invoice_gross = delivery_gross``, con IVA calculado por código de industria del proveedor.
+
+    Args:
+        base_seq: Número de secuencia base los IDs se asignan como
+            ``DOC-{base_seq:09d}`` (ORDER), ``+1`` (DESADV), ``+2`` (INVOICE).
+        rng: Generador pseudoaleatorio con semilla fija para reproducibilidad.
+        pair: Par proveedor-comprador con condiciones contractuales (lead time, términos de pago).
+        supplier_profile: Perfil del proveedor (código de industria para el cálculo del IVA).
+        buyer_profile: Perfil del comprador (usado por helpers de importes).
+        order_issue: Fecha de emisión del ORDER (punto de anclaje temporal de la tripleta).
+        order_gross: Importe bruto del pedido en euros.
+
+    Returns:
+        Lista de tres dicts con las filas CSV listas para escribir:
+            ``[order_row, desadv_row, invoice_row]``.
+    """
     delay_days = _calculate_delay_days(pair.reliability_score, rng)
     delivery_issue = order_issue + timedelta(days=pair.lead_time_days + delay_days)
     invoice_issue = delivery_issue + timedelta(days=rng.randint(0, 2))
@@ -218,7 +323,8 @@ def _generate_triplet_records(base_seq: int, rng: random.Random, pair: CompanyPa
 
     currency = "EUR"
     
-    order_id = f"DOC-{base_seq:09d}"
+    order_id  = f"DOC-{base_seq:09d}"
+    desadv_id = f"DOC-{base_seq + 1:09d}"
 
     # 1. ORDER (Pedido)
     order = {
@@ -289,7 +395,7 @@ def _generate_triplet_records(base_seq: int, rng: random.Random, pair: CompanyPa
         "supplier_company_id:string": pair.supplier_company_id,
         "buyer_company_id:string": pair.buyer_company_id,
         "delay_days:int": delay_days,
-        "reference_id:string": order_id,
+        "reference_id:string": desadv_id,
     }
 
     return [order, desadv, invoice]
@@ -300,6 +406,15 @@ def _generate_triplet_records(base_seq: int, rng: random.Random, pair: CompanyPa
 # =============================================================================
 
 def _determine_order_frequency(contract_type: str, rng: random.Random) -> int:
+    """Determina la frecuencia anual base de pedidos según el tipo de contrato.
+
+    Args:
+        contract_type: Tipo de contrato (``SPOT``, ``ANNUAL``, ``FRAME`` o ``MULTIYEAR``).
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Número entero de pedidos anuales base antes de aplicar el multiplicador de escala.
+    """
     if contract_type == "SPOT":
         return rng.randint(1, 3)
     if contract_type == "ANNUAL":
@@ -308,12 +423,31 @@ def _determine_order_frequency(contract_type: str, rng: random.Random) -> int:
 
 
 def _apply_frequency_scale(base_orders: int, avg_out_degree: int) -> int:
+    """Escala la frecuencia base de pedidos proporcionalmente al grado de salida medio.
+
+    Args:
+        base_orders: Frecuencia anual base devuelta por ``_determine_order_frequency``.
+        avg_out_degree: Multiplicador de frecuencia configurado en el CLI (``--avg-degree-documents``).
+
+    Returns:
+        Número entero de pedidos anuales escalado, mínimo 1.
+    """
     scale = max(avg_out_degree, 1) / 5.0
     return max(1, int(round(base_orders * scale)))
 
 
 def _distribute_dates_with_seasonality(start_date: date, end_date: date, num_dates: int, rng: random.Random) -> list[date]:
-    """Distribuye fechas forzando la primera en el start_date, y el resto con sesgo estacional."""
+    """Distribuye fechas forzando la primera en ``start_date`` y el resto con sesgo estacional.
+
+    Args:
+        start_date: Fecha de inicio del periodo activo (primera fecha garantizada).
+        end_date: Límite superior del periodo; ninguna fecha lo supera.
+        num_dates: Número total de fechas a generar.
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Lista de ``num_dates`` fechas ordenadas ascendentemente dentro del periodo.
+    """
     if num_dates <= 0:
         return []
     if num_dates == 1:
@@ -345,6 +479,16 @@ def _distribute_dates_with_seasonality(start_date: date, end_date: date, num_dat
 
 
 def _distribute_volume(total_volume: float, num_orders: int, rng: random.Random) -> list[float]:
+    """Distribuye un volumen total entre ``num_orders`` pedidos usando cortes aleatorios uniformes.
+
+    Args:
+        total_volume: Importe total a repartir entre todos los pedidos (€).
+        num_orders: Número de pedidos entre los que dividir el volumen.
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Lista de ``num_orders`` importes redondeados a 2 decimales que suman ``total_volume``.
+    """
     if num_orders <= 1:
         return [round(max(total_volume, 0.01), 2)]
     cuts = sorted(rng.random() for _ in range(num_orders - 1))
@@ -358,6 +502,16 @@ def _distribute_volume(total_volume: float, num_orders: int, rng: random.Random)
 
 
 def _calculate_delay_days(reliability_score: float, rng: random.Random) -> int:
+    """Calcula el retraso de entrega en días según la fiabilidad del proveedor.
+
+    Args:
+        reliability_score: Fiabilidad contractual del proveedor en ``[0, 1]``.
+            Con probabilidad ``reliability_score`` no hay retraso.
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Número entero de días de retraso, 0 si la entrega es puntual.
+    """
     if rng.random() < reliability_score:
         return 0
     max_delay = int((1.0 - reliability_score) * 20) + 2
@@ -365,5 +519,14 @@ def _calculate_delay_days(reliability_score: float, rng: random.Random) -> int:
 
 
 def _tax_rate_for_industry(industry_code: str, rng: random.Random) -> float:
+    """Selecciona el tipo de IVA aplicable según el código NACE de la industria.
+
+    Args:
+        industry_code: Código NACE del proveedor emisor (p. ej. ``C10``, ``G46``).
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Tipo de IVA como fracción decimal (p. ej. ``0.21`` para el 21 %).
+    """
     rates = INDUSTRY_TAX_RATES.get(industry_code, [0.21])
     return rng.choice(rates)

@@ -1,3 +1,8 @@
+"""Orquestador de la Fase 1: generación de datos sintéticos en CSV.
+
+Invoca los cinco sintetizadores en orden estricto de dependencia y persiste
+un artefacto JSON con las métricas de la ejecución en ``data/processed/``.
+"""
 from __future__ import annotations
 from datetime import datetime, UTC
 from pathlib import Path
@@ -12,16 +17,36 @@ from backend.etl.generation.products_synthesizer import synthesize_products_csv
 from backend.etl.generation.rel_contains_synthesizer import synthesize_rel_contains_csv
 from backend.etl.generation.supplies_synthesizer import synthesize_rel_supplies_csv
 
-def run_generate(settings: Settings, csv_target: str, rows: int, 
+def run_generate(settings: Settings, csv_target: str, rows: int,
                  avg_degree_rel_supplies: int, avg_degree_documents: int, avg_degree_products: int,
-                 gamma: float, beta: float, mu: float, 
-                 min_comm: int, max_comm: int) -> Path:
-    """
-    Fase 1: Generación de datos sintéticos, con enfoque en la creación de CSVs con dependencias en cascada.
+                 gamma: float, beta: float, mu: float) -> Path:
+    """Ejecuta la Fase 1 del pipeline: genera los CSVs sintéticos del modelo B2B.
+
+    Invoca los sintetizadores en orden estricto (Companies → Supplies → Products
+    → Documents → Contains) para respetar las dependencias entre ficheros.
+
+    Args:
+        settings: Configuración del sistema (rutas, semilla, conexión Neo4j).
+        csv_target: ``"all"`` para generar todos los CSVs, o el nombre de un
+            CSV concreto.
+        rows: Número de empresas a generar, los demás datasets escalan a partir
+            de este valor mediante los parámetros de grado medio.
+        avg_degree_rel_supplies: Grado de salida medio en la red de suministros
+            (aristas ``SUPPLIES`` por empresa proveedora).
+        avg_degree_documents: Número medio de documentos EDI por par
+            proveedor-comprador.
+        avg_degree_products: Número medio de productos por proveedor.
+        gamma: Exponente de la ley de potencia del grado (LFR).
+        beta: Exponente de la ley de potencia del tamaño de comunidades (LFR).
+        mu: Coeficiente de mezcla LFR: fracción de aristas inter-comunidad.
+
+    Returns:
+        Ruta al artefacto JSON de auditoría escrito en
+            ``data/processed/generate_last_run.json``.
     """
     logging.info(f"[FASE 1] Generación Sintética iniciada. Target: '{csv_target}'")
     logging.info(f"         LFR Params: Seed={settings.seed}, \u03B3={gamma}, \u03B2={beta}, \u03BC={mu}")
-    logging.info(f"         Dimensión: {rows} Empresas | Comunidades: [{min_comm}, {max_comm}]")
+    logging.info(f"         Dimensión: {rows} Empresas")
     logging.info(f"         Topología (Out-Degree Avg): Sup={avg_degree_rel_supplies}, Prod={avg_degree_products}, Doc={avg_degree_documents}")
     
     # Creación de los CSVs para el target indicado (puede ser "all" o un CSV específico)
@@ -59,8 +84,6 @@ def run_generate(settings: Settings, csv_target: str, rows: int,
                 gamma=gamma,
                 beta=beta,
                 mu=mu,
-                min_comm=min_comm,
-                max_comm=max_comm
             )
             companies_rows = rows
         if csv_path.name == "rel_supplies.csv":

@@ -28,7 +28,15 @@ logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
 #  PUNTO DE ENTRADA PRINCIPAL (MAIN)
 # =========================================================================
 def main() -> None:
-    """Punto de entrada principal."""
+    """Punto de entrada principal del CLI de TFG-B2B.
+
+    Parsea los argumentos de línea de comandos, carga la configuración desde
+    ``.env`` y delega a uno de los cuatro subcomandos:
+    ``generate`` → ``run_generate``, ``load`` → ``run_load``,
+    ``analyze`` → ``run_analyze``, ``all`` → ``run_all``.
+    Si se pasa ``--seed``, sobreescribe el valor de ``Settings.seed`` antes
+    de invocar el runner correspondiente.
+    """
     # Construcción del parser y lectura de argumentos
     parser = build_parser()
     args = parser.parse_args()
@@ -54,8 +62,6 @@ def main() -> None:
             gamma=getattr(args, 'gamma'),
             beta=getattr(args, 'beta'),
             mu=getattr(args, 'mu'),
-            min_comm=getattr(args, 'min_community'),
-            max_comm=getattr(args, 'max_community'),
         )
         print(f"[OK] generate -> {artifact}")
         
@@ -85,8 +91,6 @@ def main() -> None:
             gamma=getattr(args, 'gamma'),
             beta=getattr(args, 'beta'),
             mu=getattr(args, 'mu'),
-            min_comm=getattr(args, 'min_community'),
-            max_comm=getattr(args, 'max_community'),
             batch_size_loader=getattr(args, 'batch_size_loader'),
             clear_db=getattr(args, 'clear_db', False),
             skip_seed=getattr(args, 'skip_seed', False),
@@ -100,7 +104,16 @@ def main() -> None:
 #  DEFINICIÓN DEL INTERFAZ DE LÍNEA DE COMANDOS (CLI)
 # =========================================================================
 def build_parser() -> argparse.ArgumentParser:
-    """CLI con subparsers, heredando configuraciones de los submódulos."""
+    """Construye el parser principal con sus cinco subcomandos.
+
+    Cada subcomando hereda argumentos de los parsers de los sintetizadores
+    correspondientes (``get_companies_parser``, ``get_supplies_parser``, etc.)
+    mediante ``parents=[...]``, evitando duplicar definiciones de argumentos.
+
+    Returns:
+        Parser configurado con subcomandos ``generate``, ``load``,
+        ``analyze``, ``all`` y ``seed``.
+    """
     
     parser = argparse.ArgumentParser(description="Pipeline TFG-B2B", formatter_class=CleanHelpFormatter)
     subparsers = parser.add_subparsers(
@@ -190,11 +203,21 @@ class CleanHelpFormatter(argparse.HelpFormatter):
     def __init__(self, prog):
         super().__init__(prog, max_help_position=45, width=100)
         
-    def _format_action_invocation(self, action):
-        # Si es un argumento posicional, lo dejamos igual
+    def _format_action_invocation(self, action: argparse.Action) -> str:
+        """Formatea la invocación de un argumento ocultando el metavar en mayúsculas.
+
+        Para argumentos posicionales delega en el comportamiento estándar.
+        Para opciones con ``--flag`` muestra únicamente las banderas, sin el
+        metavar (p. ej. muestra ``--rows`` en lugar de ``--rows N``).
+
+        Args:
+            action: Acción del parser cuya invocación se va a formatear.
+
+        Returns:
+            Cadena formateada con las banderas del argumento, sin metavar.
+        """
         if not action.option_strings:
             return super()._format_action_invocation(action)
-        # Si es una opción (--rows, --seed), devolvemos solo la bandera y ocultamos la variable en mayúsculas
         return ', '.join(action.option_strings)
 
 

@@ -1,10 +1,16 @@
+"""Orquestador de la Fase 3: analítica avanzada del grafo y exportación a JSON.
+
+Cada método analítico se envuelve en :func:`_safe_df` / :func:`_safe_dict`
+para que un fallo individual no cancele los demás análisis.  Los resultados
+se guardan en ``data/export/`` como JSONs pre-computados consumidos por la API.
+"""
 from __future__ import annotations
 
 import logging
 from dataclasses import asdict
 from datetime import datetime, UTC
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
 from backend.core.config import Settings
 from backend.core.utils import write_step_artifact, export_dict_to_json, export_df_to_json
@@ -13,8 +19,18 @@ from backend.etl.analytics.analyzer import B2BGraphAnalyzer
 logger = logging.getLogger(__name__)
 
 
-def _safe_df(label: str, fn, export_dir: Path, filename: str) -> Optional[Path]:
-    """Run an analytics method and export it; log and continue on failure."""
+def _safe_df(label: str, fn: Callable[[], Any], export_dir: Path, filename: str) -> Optional[Path]:
+    """Ejecuta un método analítico que devuelve un DataFrame y lo exporta a JSON.
+
+    Args:
+        label: Nombre legible del método usado en el mensaje de error.
+        fn: Callable sin argumentos que devuelve un ``pandas.DataFrame``.
+        export_dir: Directorio destino del fichero JSON.
+        filename: Nombre del fichero JSON de salida.
+
+    Returns:
+        Ruta al JSON exportado, o ``None`` si el método falló.
+    """
     try:
         return export_df_to_json(fn(), export_dir, filename)
     except Exception as exc:
@@ -22,8 +38,18 @@ def _safe_df(label: str, fn, export_dir: Path, filename: str) -> Optional[Path]:
         return None
 
 
-def _safe_dict(label: str, fn, export_dir: Path, filename: str) -> Optional[Path]:
-    """Same as _safe_df but for dict-returning methods."""
+def _safe_dict(label: str, fn: Callable[[], Any], export_dir: Path, filename: str) -> Optional[Path]:
+    """Ejecuta un método analítico que devuelve un dict y lo exporta a JSON.
+
+    Args:
+        label: Nombre legible del método usado en el mensaje de error.
+        fn: Callable sin argumentos que devuelve un ``dict``.
+        export_dir: Directorio destino del fichero JSON.
+        filename: Nombre del fichero JSON de salida.
+
+    Returns:
+        Ruta al JSON exportado, o ``None`` si el método falló.
+    """
     try:
         return export_dict_to_json(fn(), export_dir, filename)
     except Exception as exc:
@@ -32,9 +58,19 @@ def _safe_dict(label: str, fn, export_dir: Path, filename: str) -> Optional[Path
 
 
 def run_analyze(settings: Settings) -> Path:
-    """
-    Fase 3: Análisis de la topología de red y exportación de resultados a JSON.
-    Cada exportación es independiente: un fallo en una no cancela las demás.
+    """Ejecuta la Fase 3 del pipeline: análisis del grafo y exportación a JSON.
+    
+    Utiliza ``B2BGraphAnalyzer`` para orquestar los cuatro bloques analíticos del 
+    sistema (macro/temporal, linaje, GDS y riesgo operacional). Las ejecuciones 
+    son independientes para garantizar tolerancia a fallos y los resultados se 
+    exportan y quedan listos para ser consumidos por la API REST.
+
+    Args:
+        settings: Configuración del sistema (rutas, conexión Neo4j).
+
+    Returns:
+        Ruta al artefacto JSON de auditoría escrito en
+            ``data/processed/analyze_last_run.json``.
     """
     export_dir = settings.data_export_dir
     export_dir.mkdir(parents=True, exist_ok=True)

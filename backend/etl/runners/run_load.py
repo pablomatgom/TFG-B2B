@@ -1,3 +1,9 @@
+"""Orquestador de la Fase 2: ingesta masiva de CSVs sintéticos en Neo4j.
+
+Crea una instancia de :class:`~backend.etl.loader.Neo4jBulkLoader`,
+verifica la conectividad, aplica constraints e índices y carga los cinco
+datasets en el orden garantizado por el loader.
+"""
 from __future__ import annotations
 from datetime import datetime, UTC
 import logging
@@ -5,11 +11,24 @@ from pathlib import Path
 
 from backend.core.config import Settings
 from backend.core.utils import write_step_artifact
-from backend.infrastructure.database.loader import Neo4jBulkLoader
+from backend.etl.loader import Neo4jBulkLoader
 
 def run_load(settings: Settings, batch_size_loader: int, clear_db: bool = False) -> Path:
-    """
-    Fase 2: Carga en la Base de Datos (Neo4j) de los CSVs generados en la fase anterior.
+    """Ejecuta la Fase 2 del pipeline: carga los CSVs sintéticos en Neo4j.
+
+    Utiliza ``Neo4jBulkLoader`` de forma segura para gestionar la carga masiva, 
+    asegurando el cierre automático de la conexión. Si se activa ``clear_db``, 
+    purga la base de datos por completo antes de empezar.
+
+    Args:
+        settings: Configuración del sistema (rutas, conexión Neo4j).
+        batch_size_loader: Número de filas por lote Neo4j.
+        clear_db: Si es ``True``, elimina todos los nodos y relaciones antes
+            de iniciar la carga.
+
+    Returns:
+        Ruta al artefacto JSON de auditoría escrito en
+            ``data/processed/load_last_run.json``.
     """
     logging.info("")
     logging.info("[FASE 2] Ingesta Masiva en Neo4j iniciada.")

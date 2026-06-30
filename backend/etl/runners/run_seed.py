@@ -1,3 +1,8 @@
+"""Orquestador del paso de seeding: crea usuarios demo en SQLite desde Neo4j.
+
+Se ejecuta automáticamente al final de :func:`~backend.etl.runners.run_all.run_all`
+(a menos que se pase ``skip_seed=True``).
+"""
 from __future__ import annotations
 
 import logging
@@ -12,7 +17,19 @@ logger = logging.getLogger(__name__)
 
 
 def run_seed(settings: Settings) -> Path:
-    """Seed demo users from existing Neo4j Company nodes into SQLite."""
+    """Crea usuarios demo en SQLite desde los nodos Company existentes en Neo4j.
+    
+    Por cada nodo de tipo empresa en el grafo, inicializa automáticamente 
+    un usuario con credenciales por defecto. Esto permite sincronizar el 
+    sistema de autenticación con los datos sintéticos cargados en la BD.
+
+    Args:
+        settings: Configuración del sistema (rutas, conexión Neo4j).
+
+    Returns:
+        Ruta al artefacto JSON de auditoría escrito en
+            ``data/processed/seed_last_run.json``.
+    """
     logger.info("--- INICIO SEED DE USUARIOS DEMO ---")
 
     stats = seed(settings)

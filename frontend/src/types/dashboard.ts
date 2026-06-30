@@ -44,7 +44,6 @@ export interface MacroStats {
     overall_discrepancy_rate_pct: number;
   };
 
-  /** Empty object `{}` when the graph has no SUPPLIES edges yet. */
   scale_free_metrics: Partial<ScaleFreeMetrics>;
 }
 
@@ -57,7 +56,6 @@ export interface TemporalSeriesRow {
   active_companies:   number;
   active_products:    number;
   active_connections: number;
-  /** Computed by the frontend: `"YYYY-MM"`. */
   date?:             string;
 }
 

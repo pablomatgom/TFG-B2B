@@ -1,4 +1,3 @@
-// types/pipeline.ts
 export interface PipelineFormData {
   rows: number;
   avg_degree_supplies: number;

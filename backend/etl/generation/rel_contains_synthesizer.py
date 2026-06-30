@@ -1,3 +1,10 @@
+"""Sintetizador de líneas de documento CONTAINS entre documentos y productos.
+
+Genera ``rel_contains.csv`` leyendo ``documents.csv`` en modo streaming y
+asociando a cada triplet (ORDER → DESADV → INVOICE) los productos del
+catálogo del proveedor correspondiente, con precios, descuentos y fechas de
+entrega coherentes con el documento raíz.
+"""
 from __future__ import annotations
 
 import csv
@@ -27,6 +34,17 @@ DOC_TYPE_LINE_STATUS = {
 
 @dataclass(frozen=True)
 class ProductRecord:
+    """Datos mínimos de producto necesarios para generar líneas CONTAINS.
+
+    Attributes:
+        product_id: Identificador único del producto.
+        supplier_company_id: ID del proveedor que lo suministra.
+        base_price: Precio base unitario en euros.
+        lead_time_baseline_days: Plazo de entrega base en días.
+        criticality: Nivel de criticidad: ``LOW``, ``MEDIUM`` o ``HIGH``.
+        unit: Unidad de medida.
+    """
+
     product_id: str
     supplier_company_id: str
     base_price: float
@@ -37,6 +55,17 @@ class ProductRecord:
 
 @dataclass(frozen=True)
 class DocumentRecord:
+    """Datos mínimos de documento necesarios para generar líneas CONTAINS.
+
+    Attributes:
+        document_id: Identificador único del documento.
+        doc_type: Tipo de documento: ``ORDER``, ``DESADV`` o ``INVOICE``.
+        issue_date: Fecha de emisión.
+        gross_amount: Importe bruto en euros.
+        supplier_company_id: ID del proveedor emisor.
+        reference_id: ID del ORDER raíz (vacío para el propio ORDER).
+    """
+
     document_id: str
     doc_type: str
     issue_date: date
@@ -47,6 +76,17 @@ class DocumentRecord:
 
 @dataclass(frozen=True)
 class LineBlueprint:
+    """Datos inmutable de una línea, compartido entre los tres documentos del triplete.
+
+    Attributes:
+        product_id: Identificador del producto de la línea.
+        lot_number: Número de lote asignado a la línea.
+        unit_price: Precio unitario en euros (con variación sobre ``base_price``).
+        discount_pct: Porcentaje de descuento.
+        expected_delivery_date: Fecha esperada de entrega desde el ``issue_date`` del ORDER.
+        weight: Peso proporcional de esta línea sobre el total del documento.
+    """
+
     product_id: str
     lot_number: str
     unit_price: float
@@ -64,7 +104,24 @@ class LineBlueprint:
 # FUNCION PRINCIPAL (MAIN)
 # =============================================================================
 def synthesize_rel_contains_csv(output_file: Path, documents_csv: Path, products_csv: Path, seed: int) -> Path:
-    """Genera rel_contains.csv a partir de documents.csv y products.csv."""
+    """Genera rel_contains.csv con líneas de documento en modo streaming.
+
+    Lee ``documents.csv`` aprovechando el orden secuencial de los tripletas
+    (ORDER → DESADV → INVOICE) para procesar cada cadena.
+
+    Args:
+        output_file: Ruta del fichero CSV de salida.
+        documents_csv: Ruta al CSV de documentos generado previamente.
+        products_csv: Ruta al CSV de productos generado previamente.
+        seed: Semilla para reproducibilidad.
+
+    Returns:
+        Ruta al fichero CSV escrito.
+
+    Raises:
+        FileNotFoundError: Si ``documents_csv`` o ``products_csv`` no existen.
+        ValueError: Si no hay productos para el proveedor de algún documento.
+    """
     rng = random.Random(seed)
     output_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -115,15 +172,27 @@ def synthesize_rel_contains_csv(output_file: Path, documents_csv: Path, products
 # FUNCIONES AUXILIARES (Helpers / Utils)
 # =============================================================================
 def _stream_document_chains(documents_csv: Path) -> typing.Iterator[tuple[DocumentRecord, list[DocumentRecord]]]:
-    """
-    Lee documents.csv en streaming (O(1) memoria) aprovechando que las cadenas
-    (Pedido -> Albarán -> Factura) se escribieron de forma secuencial y contigua.
+    """Lee documents.csv en streaming agrupando filas en cadenas de trazabilidad.
+
+    Aprovecha que los tripletas (ORDER → DESADV → INVOICE) se escribieron de
+    forma contigua para detectar cambios de cadena comparando ``reference_id``
+    sin cargar todo el fichero en memoria.
+
+    Args:
+        documents_csv: Ruta al CSV de documentos.
+
+    Yields:
+        Documento raíz (ORDER) y lista completa de documentos de la cadena.
+
+    Raises:
+        FileNotFoundError: Si ``documents_csv`` no existe.
     """
     if not documents_csv.exists():
         raise FileNotFoundError(f"No existe documents.csv: {documents_csv}")
 
     current_chain: list[DocumentRecord] = []
     current_root_id: str | None = None
+    id_to_root: dict[str, str] = {}  # resuelve referencias multi-salto al root de la cadena
 
     with documents_csv.open("r", encoding="utf-8", newline="") as csv_file:
         reader = csv.DictReader(csv_file)
@@ -131,7 +200,7 @@ def _stream_document_chains(documents_csv: Path) -> typing.Iterator[tuple[Docume
             document_id = (pick(row, "document_id:ID(Document)", "document_id") or "").strip()
             if not document_id:
                 continue
-                
+
             doc = DocumentRecord(
                 document_id=document_id,
                 doc_type=(pick(row, "doc_type:string", "doc_type") or "ORDER").strip().upper(),
@@ -141,22 +210,26 @@ def _stream_document_chains(documents_csv: Path) -> typing.Iterator[tuple[Docume
                 reference_id=(pick(row, "reference_id:string", "reference_id") or "").strip(),
             )
 
-            # Determinamos cuál es el "padre" de este documento
-            root_id = doc.document_id if not doc.reference_id else doc.reference_id
+            # Resolvemos el root siguiendo referencias multi-salto (INVOICE → DESADV → ORDER)
+            if not doc.reference_id:
+                root_id = doc.document_id
+            else:
+                root_id = id_to_root.get(doc.reference_id, doc.reference_id)
+            id_to_root[doc.document_id] = root_id
 
             if current_root_id is None:
                 current_root_id = root_id
                 current_chain.append(doc)
             elif root_id == current_root_id:
-                # Pertenece a la misma cadena que estamos procesando
                 current_chain.append(doc)
             else:
                 # Cambio de cadena: Yield de la cadena anterior y reset
                 root_doc = next((d for d in current_chain if d.doc_type == "ORDER"), current_chain[0])
                 yield root_doc, current_chain
-                
+
                 current_root_id = root_id
                 current_chain = [doc]
+                id_to_root = {doc.document_id: root_id}
 
         # No olvidar hacer yield de la última cadena al terminar el archivo
         if current_chain:

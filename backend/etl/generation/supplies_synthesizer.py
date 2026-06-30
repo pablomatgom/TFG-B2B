@@ -1,3 +1,10 @@
+"""Sintetizador de relaciones comerciales SUPPLIES entre empresas.
+
+Genera ``rel_supplies.csv`` construyendo una red Scale-Free adaptada a la
+topología LFR: las aristas intra-comunidad son más probables que las
+inter-comunidad, y los nodos con mayor ``baseline_revenue`` tienen mayor
+probabilidad de ser seleccionados como extremos de una arista.
+"""
 from __future__ import annotations
 
 import argparse
@@ -21,15 +28,26 @@ PAYMENT_TERMS_WEIGHTS = [0.05, 0.45, 0.25, 0.20, 0.05]
 SIMULATION_TODAY = date(2026, 1, 1)  # Reemplaza con date.today()
 
 
-# @dataclass para almacenar de forma inmutable la información esencial de las empresas.
 @dataclass(frozen=True)
 class CompanyRecord:
-    company_id: str             
-    node_role: str              
+    """Snapshot inmutable de atributos de empresa para la síntesis de SUPPLIES.
+
+    Attributes:
+        company_id: Identificador único de la empresa.
+        node_role: Rol operativo: ``SUPPLIER``, ``BUYER`` o ``HYBRID``.
+        region: Provincia.
+        industry_code: Código NACE de la industria.
+        size_band: Categoría de tamaño: ``micro``, ``pyme``, ``mid`` o ``enterprise``.
+        baseline_revenue: Ingresos anuales base en euros (peso de selección).
+        created_at: Fecha de creación (límite inferior de ``since_date``).
+    """
+
+    company_id: str
+    node_role: str
     region: str
     industry_code: str
     size_band: str
-    baseline_revenue: float     
+    baseline_revenue: float
     created_at: date
 
 
@@ -49,10 +67,26 @@ def get_supplies_parser() -> argparse.ArgumentParser:
 # FUNCIÓN PRINCIPAL (MAIN)
 # =============================================================================
 def synthesize_rel_supplies_csv(output_file: Path, companies_csv: Path, avg_out_degree: int, mu: float, seed: int) -> Path:
-    """Orquesta la generación de relaciones comerciales respetando la topología LFR y las escribe en un CSV."""
+    """Genera rel_supplies.csv con topología Scale-Free adaptada a comunidades LFR.
+
+    Args:
+        output_file: Ruta del fichero CSV de salida.
+        companies_csv: Ruta al CSV de empresas generado previamente.
+        avg_out_degree: Grado de salida medio deseado por proveedor.
+        mu: Coeficiente de mezcla LFR para la conexión inter-comunidad.
+            Debe ser ``0 <= mu < 1.0``.
+        seed: Semilla para reproducibilidad.
+
+    Returns:
+        Ruta al fichero CSV escrito.
+
+    Raises:
+        ValueError: Si ``avg_out_degree <= 0``, ``0 <= mu < 1.0``, o no hay
+            suficientes empresas con roles válidos para generar relaciones.
+    """
     if avg_out_degree <= 0:
         raise ValueError("avg_out_degree debe ser > 0")
-    if not (0.0 <= mu <= 1.0):
+    if not (0.0 <= mu < 1.0):
         raise ValueError("El parámetro de mezcla 'mu' debe estar entre 0.0 y 1.0")
 
     rng = random.Random(seed)
@@ -71,7 +105,18 @@ def synthesize_rel_supplies_csv(output_file: Path, companies_csv: Path, avg_out_
 # LÓGICA DE ALTO NIVEL (FUNCIONES AUXILIARES PARA LA FUNCIÓN PRINCIPAL)
 # =============================================================================
 def load_companies(companies_csv: Path) -> list[CompanyRecord]:
-    """Carga del listado de empresas generadas previamente en companies.csv."""
+    """Carga el listado de empresas desde companies.csv.
+
+    Args:
+        companies_csv: Ruta al CSV de empresas generado por ``synthesize_companies_csv``.
+
+    Returns:
+        Lista de registros de empresa con roles validados.
+
+    Raises:
+        FileNotFoundError: Si ``companies_csv`` no existe.
+        ValueError: Si el CSV no contiene registros válidos.
+    """
     if not companies_csv.exists():
         raise FileNotFoundError(f"No existe el fichero de companies: {companies_csv}")
 
@@ -110,7 +155,17 @@ def load_companies(companies_csv: Path) -> list[CompanyRecord]:
 
 
 def _generate_topology_edges(companies: list[CompanyRecord], avg_out_degree: int, mu: float, rng: random.Random) -> set[tuple[str, str]]:
-    """Calcula las conexiones del grafo usando Scale-Free adaptado a comunidades LFR."""
+    """Calcula las conexiones del grafo usando Scale-Free adaptado a comunidades LFR.
+
+    Args:
+        companies: Lista de empresas cargadas desde ``companies.csv``.
+        avg_out_degree: Grado de salida medio deseado por proveedor.
+        mu: Proporción de aristas inter-comunidad (coeficiente de mezcla LFR).
+        rng: Generador aleatorio inicializado con la semilla global.
+
+    Returns:
+        Conjunto de pares ``(supplier_id, buyer_id)`` sin duplicados ni autoenlaces.
+    """
     
     # Preparación de estructuras y cálculos base
     community_buckets, suppliers, buyers, community_keys = _build_community_structures(companies)
@@ -173,7 +228,21 @@ def _generate_topology_edges(companies: list[CompanyRecord], avg_out_degree: int
 
 
 def _build_community_structures(companies: list[CompanyRecord]) -> tuple[dict, list, list, list]:
-    """Agrupa las empresas en comunidades latentes y devuelve las estructuras necesarias."""
+    """Agrupa las empresas en comunidades latentes y devuelve las estructuras necesarias.
+
+    Args:
+        companies: Lista de empresas cargadas desde ``companies.csv``.
+
+    Returns:
+        Tupla de cuatro elementos:
+            - ``community_buckets``: dict ``{(attr, val): {"suppliers": [...], "buyers": [...]}}``
+            - ``total_list_suppliers``: lista global de empresas con rol proveedor.
+            - ``total_list_buyers``: lista global de empresas con rol comprador.
+            - ``community_keys``: claves de comunidades válidas (≥1 proveedor y ≥1 comprador distintos).
+
+    Raises:
+        ValueError: Si no hay empresas con roles válidos o ninguna comunidad es válida.
+    """
     community_buckets: dict[tuple[str, str], dict[str, list[CompanyRecord]]] = {}
     total_list_suppliers: list[CompanyRecord] = []
     total_list_buyers: list[CompanyRecord] = []
@@ -229,7 +298,20 @@ def _build_community_structures(companies: list[CompanyRecord]) -> tuple[dict, l
 
 
 def _calculate_edge_targets(total_companies: int, total_suppliers: int, total_buyers: int, avg_out_degree: int) -> tuple[int, int]:
-    """Calcula el número objetivo de aristas y el máximo matemático posible, previniendo saturación."""
+    """Calcula el número objetivo de aristas y el máximo matemático posible, previniendo saturación.
+
+    Args:
+        total_companies: Número total de empresas en el grafo.
+        total_suppliers: Número de empresas con rol proveedor (``SUPPLIER`` o ``HYBRID``).
+        total_buyers: Número de empresas con rol comprador (``BUYER`` o ``HYBRID``).
+        avg_out_degree: Grado de salida medio deseado por proveedor.
+
+    Returns:
+        Tupla ``(target_edges, max_possible_edges)``: objetivo real y máximo bipartito posible.
+
+    Raises:
+        ValueError: Si no hay proveedores o compradores suficientes para generar aristas.
+    """
     max_possible_edges = total_suppliers * total_buyers
     
     if max_possible_edges == 0:
@@ -246,7 +328,18 @@ def _calculate_edge_targets(total_companies: int, total_suppliers: int, total_bu
 
 
 def _precalculate_community_weights(community_buckets: dict, community_keys: list) -> tuple[dict, list[float], list[float]]:
-    """Precalcula los pesos ACUMULADOS para selección eficiente O(log N)."""
+    """Precalcula los pesos acumulados por comunidad para selección eficiente O(log N).
+
+    Args:
+        community_buckets: Diccionario de comunidades con listas de proveedores y compradores.
+        community_keys: Lista de claves de comunidades válidas sobre las que iterar.
+
+    Returns:
+        Tupla de tres elementos:
+            - ``pool_cum_weights``: dict ``{(key, role): [cum_weight, ...]}`` por empresa.
+            - ``comm_supplier_cum_weights``: pesos acumulados por comunidad (proveedores).
+            - ``comm_buyer_cum_weights``: pesos acumulados por comunidad (compradores).
+    """
     pool_cum_weights = {}
     
     for key, bucket in community_buckets.items():
@@ -276,7 +369,14 @@ def _precalculate_community_weights(community_buckets: dict, community_keys: lis
 
 
 def _write_supplies_to_csv(output_file: Path, edges: set[tuple[str, str]], companies: list[CompanyRecord], rng: random.Random) -> None:
-    """Enriquece las aristas con atributos comerciales basados en lógica de negocio real."""
+    """Enriquece las aristas con atributos comerciales basados en lógica de negocio real.
+
+    Args:
+        output_file: Ruta del fichero CSV de salida.
+        edges: Conjunto de pares ``(supplier_id, buyer_id)`` generados por la topología.
+        companies: Lista de empresas para acceder a los atributos de cada extremo.
+        rng: Generador aleatorio inicializado con la semilla global.
+    """
     companies_dict = {c.company_id: c for c in companies}
     
     output_file.parent.mkdir(parents=True, exist_ok=True)
@@ -340,7 +440,15 @@ def _write_supplies_to_csv(output_file: Path, edges: set[tuple[str, str]], compa
 # =============================================================================
 
 def _parse_created_at(raw_date: str | None) -> date:
-    """Parsea la fecha de creación de la empresa desde el CSV."""
+    """Parsea la fecha de creación de la empresa desde el CSV.
+
+    Args:
+        raw_date: Cadena leída desde el campo ``created_at`` del CSV,
+            o ``None`` / cadena vacía si el campo no está presente.
+
+    Returns:
+        Objeto ``date`` correspondiente, o una fecha de hace 5 años como fallback.
+    """
     if raw_date and raw_date.strip():
         value = raw_date.strip().replace("Z", "+00:00")
         try:
@@ -353,7 +461,15 @@ def _parse_created_at(raw_date: str | None) -> date:
 
 
 def _random_since_date(rng: random.Random, start_date: date) -> str:
-    """Generación de fecha inicio de relación comercial lógica."""
+    """Genera una fecha de inicio de relación comercial aleatoria entre ``start_date`` y hoy.
+
+    Args:
+        rng: Generador aleatorio inicializado con la semilla global.
+        start_date: Límite inferior (la más reciente de las fechas de creación de ambas empresas).
+
+    Returns:
+        Fecha en formato (``YYYY-MM-DD``) dentro del rango válido.
+    """
     if start_date >= SIMULATION_TODAY:
         return SIMULATION_TODAY.isoformat()
         

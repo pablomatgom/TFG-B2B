@@ -1,5 +1,12 @@
-from __future__ import annotations
+"""Trazabilidad documental sobre aristas FULFILLS de la red B2B.
 
+La cadena de trazabilidad estándar tiene dos saltos:
+``INVOICE → FULFILLS → DESADV → FULFILLS → ORDER``.
+Los tres métodos expuestos recorren esta cadena en sentido inverso (backward),
+extraen el camino exacto nodo a nodo (exact-path) o la recorren en sentido directo
+(forward) desde el pedido hacia sus documentos de cumplimiento derivados.
+"""
+from __future__ import annotations
 
 import pandas as pd
 
@@ -87,15 +94,21 @@ _Q_FORWARD = """
 
 
 class LineageMixin:
-    """Trazabilidad documental: backward trace, extracción de camino exacto y forward traceability."""
+    """Trazabilidad documental: backward trace, extracción de camino exacto y forward traceability.
+
+    La cadena estándar es ``INVOICE → DESADV → ORDER`` (2 saltos).
+    Los límites ``*1..5`` de las queries Cypher permiten cadenas extendidas si el modelo de datos
+    evoluciona con tipos de documento adicionales.
+    """
 
     def get_backward_traceability(self) -> pd.DataFrame:
         """Recorre la cadena FULFILLS hacia atrás desde facturas con discrepancia hasta el pedido original.
 
-        Recorre inversamente las aristas ``FULFILLS`` con un límite topológico de hasta 5 saltos para 
-        conectar directamente un síntoma documental detectado (``discrepancy_flag = true``) con el 
-        contrato primario (``ORDER``) que inició el ciclo comercial, aislando el impacto económico expuesto.
-
+        Recorre inversamente las aristas ``FULFILLS`` (``INVOICE → DESADV → ORDER``, 2 saltos estándar)
+        para conectar una anomalia de facturación (``discrepancy_flag = true``) con su orden de compra 
+        original. Esto permite identificar el origen contractual del problema y cuantificar el riesgo
+        económico asociado.
+        
         Returns:
             DataFrame con las columnas:
 
@@ -112,12 +125,12 @@ class LineageMixin:
         return pd.DataFrame(self._fetch_data(_Q_DISCREPANCY_LINEAGE))
 
     def extract_lineage_paths(self) -> pd.DataFrame:
-        """Extrae la secuencia cronológica e histórica completa entre cada factura discrepante y su pedido raíz.
+        """Extrae la secuencia cronológica completa entre cada factura discrepante y su pedido raíz.
 
-        Resuelve y aísla el camino transaccional más corto en el grafo para cada par bipartito (factura, pedido). 
-        La propiedad mapeada ``cadena_completa`` reconstituye de forma secuencial los estados, fechas e 
-        importes de todos los nodos intermedios (como albaranes de entrega ``DELIVERY``), sirviendo de base 
-        para una auditoría forense del dato.
+        Resuelve el camino transaccional más corto para cada par (factura, pedido).
+        La propiedad ``cadena_completa`` reconstituye secuencialmente los tres nodos de la cadena
+        INVOICE, DESADV y ORDER con sus estados, fechas e importes, sirviendo de base para una
+        auditoría financiera de los datos.
 
         Returns:
             DataFrame ordenado por ``saltos_topologicos DESC`` con las columnas:
@@ -129,7 +142,7 @@ class LineageMixin:
                 | ``proveedor`` | str | Emisor del pedido (``Desconocido`` si huérfano) |
                 | ``afectado`` | str | Receptor del pedido (``Desconocido`` si huérfano) |
                 | ``cadena_completa`` | list[dict] | Nodos del recorrido: ``{id, tipo, importe, discrepancy, estado, fecha}`` |
-                | ``saltos_topologicos`` | int | Longitud del camino más corto encontrado |
+                | ``saltos_topologicos`` | int | Longitud del camino más corto (2 en cadena estándar) |
                 | ``importe_factura`` | float | Importe bruto de la factura (€) |
                 | ``importe_pedido`` | float | Importe bruto del pedido (€) |
         """
@@ -138,12 +151,13 @@ class LineageMixin:
     def get_forward_traceability(self) -> pd.DataFrame:
         """Recorre la cadena FULFILLS hacia adelante desde cada pedido para listar sus flujos derivados.
 
-        Inspecciona el flujo aguas abajo de las aristas ``FULFILLS`` a partir de cada nodo ``ORDER``, agregando 
-        y agrupando de forma relacional toda la documentación subsiguiente emitida en su cumplimiento. Ordena 
-        los resultados según la acumulación de anomalías derivadas para priorizar la fricción operativa en el cliente.
+        Proyecta el linaje documental en sentido descendente a partir de cada pedido, 
+        consolidando todos los registros generados durante su ciclo de vida. Los 
+        resultados se ordenan por el volumen de anomalías acumuladas, visibilizando 
+        inmediatamente las cadenas comerciales con mayor fricción operativa.
 
         Returns:
-            pd.DataFrame: Matriz de auditoría secuencial ordenada por nivel de conflicto documental. Columnas:
+            DataFrame ordenado por ``docs_con_discrepancia DESC``. Columnas:
 
                 | Columna | Tipo | Descripción |
                 |---|---|---|

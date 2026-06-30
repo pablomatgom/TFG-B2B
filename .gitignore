@@ -43,6 +43,7 @@ ipython_config.py
 # 5. LOGS Y BENCHMARKING COMPUTACIONAL
 # Archivos generados durante la monitorización de rendimiento
 *.log
+site/
 /logs/
 benchmarking_results/
 
