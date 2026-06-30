@@ -1,5 +1,6 @@
 site_name: "B2B Graph Intel - Manual del Desarrollador"
 site_description: "Documentación técnica del sistema completo: frontend Next.js, backend FastAPI, pipeline ETL y algoritmos de grafos (GDS)."
+site_url: "https://b2b-graph-intelligence.duckdns.org/docs/"
 
 theme:
   name: material
