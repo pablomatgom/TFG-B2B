@@ -56,7 +56,7 @@ class User(Base):
     full_name       = Column(String, nullable=True)
     role            = Column(String, default="company_user")
     is_active       = Column(Integer, default=1)
-    created_at      = Column(DateTime, default=datetime.timezone.utc)
+    created_at      = Column(DateTime, default=datetime.datetime.utcnow)
 
 
 Base.metadata.create_all(bind=engine)

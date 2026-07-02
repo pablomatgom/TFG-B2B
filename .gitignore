@@ -60,6 +60,11 @@ node_modules/
 .next/
 out/
 
+# 8. COBERTURA DE TESTS (Python + Jest)
+.coverage
+coverage.xml
+htmlcov/
+
 # Archivos basura del Sistema Operativo
 .DS_Store
 .DS_Store?

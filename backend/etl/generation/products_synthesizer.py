@@ -359,7 +359,7 @@ def _choose_category_by_industry(industry_code: str, rng: random.Random) -> str:
     Returns:
         Clave de categoría de ``PRODUCT_CATEGORIES`` (p. ej. ``components``, ``packaging``).
     """
-    priors = INDUSTRY_CATEGORY_PRIORS.get(industry_code)
+    priors = INDUSTRY_CATEGORY_PRIORS.get(industry_code) or INDUSTRY_CATEGORY_PRIORS["G46"]
     categories = list(priors.keys())
     weights = list(priors.values())
     return rng.choices(categories, weights=weights, k=1)[0]
